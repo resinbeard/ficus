@@ -77,7 +77,7 @@ rtqueue_enq(rtqueue_t *q, float data)
 {
   /* if queue is full, return */
   while ((q->tail + 1) % (q->recordlimit + 1) == q->head)
-    return;
+    {}
 
   q->queue[q->tail] = data;
   q->tail = (q->tail + 1) % (q->recordlimit + 1);
@@ -92,8 +92,8 @@ rtqueue_deq(rtqueue_t *q)
   float data;
 
   /* if queue is empty, return */
-  if (q->head == q->tail)
-    return;
+  while (q->head == q->tail)
+    {}
 
   /* dequeue and return data at the head */
   data = q->queue[q->head];
