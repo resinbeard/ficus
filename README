@@ -1,0 +1,39 @@
+
+FICUS
+
+'ficus' is a realtime sampler API and JACK client for linux.
+
+thru JACK and libsndfile, this api provides simultaneous, multichannel playback/capture 
+of audio from/to your hard drive.
+
+i decided to distribute this software as a source file because i thought it best that the 
+number of input/output channels, and storage capacity, of each instance of the 'ficus' client 
+be available via a header file called 'config.h'.
+
+please note, this software has only been tested via an 8in/8out echo layla24 and
+cakewalk (roland) ua-5ex.
+
+Dependencies:
+libsndfile jack
+
+Installing:
+copy the libficus files to your target build directory and build your application
+like any other included '.c' source file.
+
+cp libficus/libficus.c yourprogram/.
+cp libficus/libficus.h yourprogram/.
+cp libficus/rtqueue.h yourprogram/.
+cp libficus/config.h yourprogram/.
+
+gcc -o yourprogram yourprogram.c libficus.c -lsndfile -ljack
+
+Example Usage:
+Just add this to your code and see 'libficus.h' for available functions.
+(that last integer argument is the bit depth to record all NEW files to)
+
+/* libficus setup */
+  if (ficus_setup("yourprogram", "path/to/samples", "testwav", 32) == 1)
+   {
+     fprintf(stderr, "yourprogram: libficus setup failed.\n");
+     return;
+   }
