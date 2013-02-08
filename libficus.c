@@ -12,7 +12,8 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-Copyright 2013 murray foster */
+Copyright 2013 murray foster 
+mrafoster at gmail dawt com */
 
 #include <stdio.h>
 #include <time.h>

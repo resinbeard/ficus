@@ -14,7 +14,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 'libficus' is a really simple api for playback/recording of WAV audio data implemented in C 
-Copyright 2013 murray foster */
+Copyright 2013 murray foster 
+mrafoster at gmail dawtcom */
 
 #ifndef libficus_h__
 #define libficus_h__
