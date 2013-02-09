@@ -1,7 +1,7 @@
 
 FICUS
 
-'ficus' is a nonblocking realtime audio sample api for linux devs. 
+'ficus' is a nonblocking realtime audio sampler api for linux devs. 
 it is written by murray foster, please write at: mrafoster at gmail dawt com
 
 with jack and libsndfile, this software provides simultaneous, multichannel playback/capture of mono wav audio files by way of your harddrive and alsa (also probably faado) compatible audio interface.
