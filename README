@@ -1,7 +1,7 @@
 
 FICUS
 
-'ficus' is a realtime audio sample api for linux devs. 
+'ficus' is a NONBLOCKING realtime audio sample api for linux devs. 
 it is written by murray foster, please write at: mrafoster at gmail dawt com
 
 with jack and libsndfile, this software provides simultaneous, multichannel playback/capture of mono wav audio files by way of your harddrive and alsa (also probably faado) compatible audio interface.
@@ -32,7 +32,7 @@ Just add this to your code and see 'libficus.h' for available functions.
      return;
    }
 
-TODO (1/7/2013):
+TODO (2/7/2013):
 *Bugfix; JACK zombifies the 'ficus' client after high number of audio sample retriggers (observed at high speed >=240bpm)
 *Bugfix; if an audio sample bank is set to loop, it will restart playback of that sample bank even after calling kill_playback() on that bank
 *General code refactorization
