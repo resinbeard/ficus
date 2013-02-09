@@ -1,14 +1,14 @@
 
 FICUS
 
-'ficus' is a realtime sampler API and JACK client for linux by murray foster.
-mrafoster at gmail dawt com
+'ficus' is a realtime audio sample api for linux devs. 
+it is written by murray foster, please write at: mrafoster at gmail dawt com
 
-thru JACK and libsndfile, this api provides simultaneous, multichannel playback/capture of audio from/to your hard drive.
+with jack and libsndfile, this software provides simultaneous, multichannel playback/capture of mono wav audio files by way of your harddrive and alsa (also probably faado) compatible audio interface.
 
-i decided to distribute this software as a source file because i thought it best that the number of input/output channels, and storage capacity, of each instance of the 'ficus' client be available via a header file called 'config.h'.
+i decided to distribute this software as a group of source files because i thought it best that the number of input/output channels, and storage capacity, of each 'ficus' client be available via a header file ('config.h').
 
-please note, this software has only been tested via an 8in/8out echo layla24 and cakewalk (roland) ua-25ex.
+please note, this software has been tested via an echo layla24 and cakewalk (roland) ua-25ex.
 
 Dependencies:
 libsndfile jack
@@ -17,6 +17,9 @@ Installing:
 copy the libficus files to your target build directory and build your application like any other included '.c' source file.
 
 cp -r libficus/* yourprogram/.
+
+Building:
+gcc -o yourprogram yourprogram.c libficus.c -lsndfile -ljack
 
 Example Usage:
 Just add this to your code and see 'libficus.h' for available functions.
@@ -29,11 +32,9 @@ Just add this to your code and see 'libficus.h' for available functions.
      return;
    }
 
-gcc -o yourprogram yourprogram.c libficus.c -lsndfile -ljack
-
 TODO:
-Bugfix; JACK zombifies the 'ficus' client after high number of audio sample retriggers (being sequenced at high speed >=240bpm
-Bugfix; if an audio sample bank is set to loop, it will restart playback of that sample bank even after calling kill_playback() on it
+Bugfix; JACK zombifies the 'ficus' client after high number of audio sample retriggers (observed at high speed >=240bpm)
+Bugfix; if an audio sample bank is set to loop, it will restart playback of that sample bank even after calling kill_playback() on that bank
 General code refactorization
 Write documentation
 Implement some midi capability (namely, triggered capturing of 'armed' samples)
