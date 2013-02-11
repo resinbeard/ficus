@@ -314,62 +314,67 @@ disk_thread (void *arg)
   float buf_out[1];
   
   int count = 0;
-  
+ 
   do
     {
-      /* let the world know that we are currently
-	 processing this soundfile */
-      active_file_record[0][info[sample_num].bank_number] = 1;
-      
-      /* seek to beginning of file */
-      sf_seek  (info[sample_num].sndfile, 0, SEEK_SET) ;
-      
-      while (1)
-	{ 
-	  read_frames=0;
-	  /* kill playback for this sample? */
-	  /* we have to do this again so that loop_state
-	     doesn't keep us in this do-while{} */
-	  if( info[sample_num].kill == 1 )
-	    {
-	      active_file_record[0][info[sample_num].bank_number] = 0;
-	      info[sample_num].kill = 0;
-	      break;
-	    }  
+      do
+	{
+	  /* let the world know that we are currently
+	     processing this soundfile */
+	  active_file_record[0][info[sample_num].bank_number] = 1;
 	  
-	  /* if the playback queue is NOT full */
-	  if ( (rtqueue_isfull(fifo_out[info[sample_num].bank_number]) == 0) )
-	    {
-	      /* read ONE frame from our soundfile (4kb assumedly),
-		 sometimes it's good to be a slowpoke! */
-	      read_frames = sf_readf_float (info[sample_num].sndfile, buf_out, 1) ;
+	  /* seek to beginning of file */
+	  sf_seek  (info[sample_num].sndfile, 0, SEEK_SET) ;
+	  
+	  while (1)
+	    { 
+	      read_frames=0;
+	      /* kill playback for this sample? */
+	      /* we have to do this again so that loop_state
+		 doesn't keep us in this do-while{} */
+	      if( info[sample_num].kill == 1 )
+		{
+		  active_file_record[0][info[sample_num].bank_number] = 0;
+		  info[sample_num].kill = 0;
+		  break;
+		}  
 	      
-	      /* if no frames read, we assume the end of file.. */
-	      if (read_frames == 0)		  
-		break ;
-	      
-	      /* fill playback queue with data  */
-	      for (count = 0; count < read_frames; count++)
-		rtqueue_enq(fifo_out[info[sample_num].bank_number], buf_out[count]);
-	      
-	      /* signal process thread there is data to process 
-		 from this sample bank */
-	      samples_can_process[info[sample_num].bank_number] = 1 ;
-	    }
+	      /* if the playback queue is NOT full */
+	      if ( (rtqueue_isfull(fifo_out[info[sample_num].bank_number]) == 0) )
+		{
+		  /* read ONE frame from our soundfile (4kb assumedly),
+		     sometimes it's good to be a slowpoke! */
+		  read_frames = sf_readf_float (info[sample_num].sndfile, buf_out, 1) ;
+		  
+		  /* if no frames read, we assume the end of file.. */
+		  if (read_frames == 0)
+		    if(!info[sample_num].user_interrupt)
+		      break ;
+		  
+		  /* fill playback queue with data  */
+		  for (count = 0; count < read_frames; count++)
+		    rtqueue_enq(fifo_out[info[sample_num].bank_number], buf_out[count]);
+		  
+		  /* signal process thread there is data to process 
+		     from this sample bank */
+		  samples_can_process[info[sample_num].bank_number] = 1 ;
+		} 
+	    } 
+	}
+      while( (loop_state[info[sample_num].bank_number]==1) );
+      
+      /* hang here until this sample finished playing */
+      while( samples_can_process[sample_num] )
+	{
+	  if(info[sample_num].user_interrupt)
+	    break; 
 	}
     }
-  while( (loop_state[info[sample_num].bank_number]==1) || info[sample_num].user_interrupt);
-  
-  
-  /* hang here until this sample finished playing */
-  while( samples_can_process[sample_num] )
-    {
-      if(info[sample_num].user_interrupt)
-	break; 
-    }
+  while( info[sample_num].user_interrupt);
 
   /* done with this sample bank! */
   active_file_record[0][sample_num] = 0;
+
   return 0 ;
 } /* disk_thread */
 
