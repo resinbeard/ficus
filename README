@@ -32,7 +32,7 @@ Just add this to your code and see 'libficus.h' for available functions.
      return;
    }
 
-TODO (2/7/2013):
+TODO (2/10/2013):
 *General code refactoring
 *Write documentation
 *Implement some midi capability (namely, triggered capturing of 'armed' samples)
