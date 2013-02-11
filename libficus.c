@@ -114,21 +114,39 @@ rtqueue_t *fifo_out[NUM_SAMPLES];
 rtqueue_t *fifo_in[NUM_CHANNELS];
 
 int fifo_out_clear_amount[NUM_SAMPLES]={0};
+int fifo_out_clear_sig[NUM_SAMPLES]={0};
 pthread_t fifo_out_clear_thread_id; 
 
 void *
 clear_fifo_out (int bank, int numrecords)
 {
   int n=0;
-  for(n=0; n<numrecords; n++)
+  for(n=0;n<numrecords;n++)
     {
-      if(rtqueue_isempty(fifo_out[bank])==0)
+      if(rtqueue_isempty(fifo_out[bank]))
 	break;
       rtqueue_deq(fifo_out[bank]);
     }
   fifo_out_clear_amount[bank]=0;
   return;
 } /* clear_fifo_out */
+
+void *
+clear_fifo_out_thread ()
+{
+  int x;
+  while(1)
+    {
+      for(x=0;x<NUM_SAMPLES;x++)
+	if(fifo_out_clear_sig[x])
+	  {
+	    samples_can_process[x]=0;
+	    clear_fifo_out(x,rtqueue_numrecords(fifo_out[x]));
+	    fifo_out_clear_sig[x]=0;
+	    info[x].user_interrupt=0;
+	  }
+    }
+}
 
 static int
 process (jack_nframes_t nframes, void * arg)
@@ -163,20 +181,11 @@ process (jack_nframes_t nframes, void * arg)
 
       for (sample_count = 0; sample_count < NUM_SAMPLES; sample_count++)
 	{
-	  sample = 0;
+	  sample = 0;	
 	  
-	  /* Has the playback for this sample been interrupted? */
-	  /* Has the playback for this sample been interrupted? */
-	  if( info[sample_count].user_interrupt == 1 )
-	    /* Empty playback buffer of data so we can stop playback
-	       without waiting for audio to process out */
-	    {
-	      
-	      clear_fifo_out(sample_count, rtqueue_numrecords(fifo_out[sample_count]));
-	      info[sample_count].user_interrupt=0;
-	      sample=0;
-	    }
-	  
+	  if( info[sample_count].user_interrupt )
+	    fifo_out_clear_sig[sample_count]=1;
+
 	  /* Has this queue run out of audio to process? */
 	  if ( rtqueue_isempty(fifo_out[sample_count]) 
 	       && samples_can_process[sample_count])
@@ -189,7 +198,7 @@ process (jack_nframes_t nframes, void * arg)
 	    }
 	  else
 	    /* The buffer isn't empty, is there audio to process? */
-	    if (samples_can_process[sample_count])
+	    if (samples_can_process[sample_count] && (info[sample_count].user_interrupt==0))
 	      {
 		/* If so, dequeue a frame for this sample */
 		sample = rtqueue_deq(fifo_out[sample_count]);
@@ -207,7 +216,7 @@ process (jack_nframes_t nframes, void * arg)
   
   return 0 ;
 } /* process */
-
+//
 void * 
 disk_thread_in (void *arg)
 {
@@ -306,65 +315,67 @@ disk_thread (void *arg)
   float buf_out[1];
   
   int count = 0;
-  
+ 
   do
     {
-      /* let the world know that we are currently
-	 processing this soundfile */
-      active_file_record[0][info[sample_num].bank_number] = 1;
-      
-      /* seek to beginning of file */
-      sf_seek  (info[sample_num].sndfile, 0, SEEK_SET) ;
-      
-      while (1)
-	{	  
-	  read_frames = 0 ;
-
-	  /* kill playback for this sample? */
-	  /* we have to do this again so that loop_state
-	     doesn't keep us in this do-while{} */
-	  if( info[sample_num].kill == 1 )
-	    {
-	      active_file_record[0][info[sample_num].bank_number] = 0;
-	      info[sample_num].kill = 0;
-	      break;
-	    }  
-
-	  /* if the playback queue is NOT full */
-	  if ( (rtqueue_isfull(fifo_out[info[sample_num].bank_number]) == 0) )
-	    {
-	      /* read ONE frame from our soundfile (4kb assumedly),
-		 sometimes it's good to be a slowpoke! */
-	      read_frames = sf_readf_float (info[sample_num].sndfile, buf_out, 1) ;
-	      
-	      /* if no frames read, we assume the end of file.. */
-	      if (read_frames == 0)
-		break ;
-	      
-	      /* fill playback queue with data  */
-	      for (count = 0; count < read_frames; count++)
-		rtqueue_enq(fifo_out[info[sample_num].bank_number], buf_out[count]);
-
-	      /* signal process thread there is data to process 
-		 from this sample bank */
-	      samples_can_process[info[sample_num].bank_number] = 1 ;
-	    }
-	}
-      
-      /* tell that we're done reading the file. */
-      info[sample_num].read_done = 1;
-      
-      /* hang here until this sample finished playing 
-	 (otherwise we queue too much data in our fifo queues) */
-      while (samples_can_process[info[sample_num].bank_number] == 1)
+      do
 	{
+	  /* let the world know that we are currently
+	     processing this soundfile */
+	  active_file_record[0][info[sample_num].bank_number] = 1;
+	  
+	  /* seek to beginning of file */
+	  sf_seek  (info[sample_num].sndfile, 0, SEEK_SET) ;
+	  
+	  while (1)
+	    { 
+	      read_frames=0;
+	      /* kill playback for this sample? */
+	      /* we have to do this again so that loop_state
+		 doesn't keep us in this do-while{} */
+	      if( info[sample_num].kill == 1 )
+		{
+		  active_file_record[0][info[sample_num].bank_number] = 0;
+		  info[sample_num].kill = 0;
+		  break;
+		}  
+	      
+	      /* if the playback queue is NOT full */
+	      if ( (rtqueue_isfull(fifo_out[info[sample_num].bank_number]) == 0) )
+		{
+		  /* read ONE frame from our soundfile (4kb assumedly),
+		     sometimes it's good to be a slowpoke! */
+		  read_frames = sf_readf_float (info[sample_num].sndfile, buf_out, 1) ;
+		  
+		  /* if no frames read, we assume the end of file.. */
+		  if (read_frames == 0)
+		    if(!info[sample_num].user_interrupt)
+		      break ;
+		  
+		  /* fill playback queue with data  */
+		  for (count = 0; count < read_frames; count++)
+		    rtqueue_enq(fifo_out[info[sample_num].bank_number], buf_out[count]);
+		  
+		  /* signal process thread there is data to process 
+		     from this sample bank */
+		  samples_can_process[info[sample_num].bank_number] = 1 ;
+		} 
+	    } 
+	}
+      while( (loop_state[info[sample_num].bank_number]==1) );
+      
+      /* hang here until this sample finished playing */
+      while( samples_can_process[sample_num] )
+	{
+	  if(info[sample_num].user_interrupt)
+	    break; 
 	}
     }
-  while( loop_state[info[sample_num].bank_number] == 1 );
-  
+  while( info[sample_num].user_interrupt);
+
   /* done with this sample bank! */
-  active_file_record[0][info[sample_num].bank_number] = 0;
-  
+  active_file_record[0][sample_num] = 0;
+
   return 0 ;
 } /* disk_thread */
 
@@ -812,7 +823,7 @@ ficus_setup(char *client_name, char *path, char *prefix, int bit_depth)
   setup_recbanks(path, prefix, bit_depth);
   
   pthread_create (&capture_thread_id, NULL, disk_thread_in, NULL);
-
+  pthread_create (&fifo_out_clear_thread_id, NULL, clear_fifo_out_thread, NULL);
 
   return 0;
 
