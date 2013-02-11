@@ -33,8 +33,6 @@ Just add this to your code and see 'libficus.h' for available functions.
    }
 
 TODO (2/7/2013):
-*Bugfix; JACK zombifies the 'ficus' client after high number of audio sample retriggers (observed at high speed >=240bpm)
-*Bugfix; if an audio sample bank is set to loop, it will restart playback of that sample bank even after calling kill_playback() on that bank
-*General code refactorization
+*General code refactoring
 *Write documentation
 *Implement some midi capability (namely, triggered capturing of 'armed' samples)

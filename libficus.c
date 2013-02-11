@@ -336,7 +336,6 @@ disk_thread (void *arg)
 	      if( info[sample_num].kill == 1 )
 		{
 		  active_file_record[0][info[sample_num].bank_number] = 0;
-		  info[sample_num].kill = 0;
 		  break;
 		}  
 	      
@@ -359,17 +358,25 @@ disk_thread (void *arg)
 		  /* signal process thread there is data to process 
 		     from this sample bank */
 		  samples_can_process[info[sample_num].bank_number] = 1 ;
-		} 
+		}
 	    } 
+	  if( info[sample_num].kill )
+	    break; 
 	}
       while( (loop_state[info[sample_num].bank_number]==1) );
-      
+
       /* hang here until this sample finished playing */
       while( samples_can_process[sample_num] )
 	{
 	  if(info[sample_num].user_interrupt)
 	    break; 
 	}
+      if( info[sample_num].kill )
+	{
+	  info[sample_num].kill = 0;
+	  break;
+	}
+
     }
   while( info[sample_num].user_interrupt);
 
