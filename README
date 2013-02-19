@@ -22,15 +22,7 @@ Building:
 gcc -o yourprogram yourprogram.c libficus.c -lsndfile -ljack
 
 Example Usage:
-Just add this to your code and see 'libficus.h' for available functions.
-(that last integer argument is the bit depth to record all NEW files to)
-
-/* libficus setup */
-  if (ficus_setup("yourprogram", "path/to/samples", "testwav", 32) == 1)
-   {
-     fprintf(stderr, "yourprogram: libficus setup failed.\n");
-     return;
-   }
+See the 'examples/' directory.
 
 TODO (2/10/2013):
 *General code refactoring
