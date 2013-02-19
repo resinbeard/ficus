@@ -40,7 +40,4 @@ mrafoster at gmail dawtcom */
 			    (memory) will seg-fault your JACK
 			    client.  Overallication will zombify your
 			   JACK client if you queue too much data. */
-
-#define BIT_DEPTH 32 /* bit depth of all newly created wav files */
-
 #endif

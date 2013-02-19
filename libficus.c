@@ -38,9 +38,7 @@ mrafoster at gmail dawt com */
 #define IN_FRAMES 50000 /* size of input buffer in FRAMES,
 			   change this size based on available
 			   system memory */
-
 #define OUT_FRAMES 50000 /* same as above but for output */
-#define BIT_DEPTH 32 /* bit depth of created wav samples */
 
 #include "config.h"
 
