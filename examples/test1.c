@@ -49,8 +49,8 @@ main (int narg, char * args [])
 
   sleep(6);
 
-  ficus_loadfile("test/0.wav", 0);
-  fprintf(stderr, "\nLOAD FILE '0.wav' TO BANK '0'\n");
+  ficus_loadfile("capturedwavs/test0.wav", 0);
+  fprintf(stderr, "\nLOAD FILE 'test0.wav' TO BANK '0'\n");
 
   ficus_playback(0);
   fprintf(stderr, "\nPLAY BANK 0\n");
