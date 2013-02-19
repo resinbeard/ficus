@@ -1,0 +1,5 @@
+there are the various example uses of ficus.
+
+to build examples, simply type:
+./maketests
+
