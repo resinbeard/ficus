@@ -53,6 +53,8 @@ typedef struct _thread_info
   volatile int bank_number;
   volatile int user_interrupt;
   volatile int kill;
+  volatile int reverse;
+  volatile float speedmult;
 } thread_info_t ;
 
 typedef struct _thread_info_in
@@ -292,6 +294,19 @@ disk_thread_in (void *arg)
   return 0;
 } /* disk_thread_in */
 
+int random_in_range (unsigned int min, unsigned int max)
+{
+  int base_random = rand();
+  if (RAND_MAX == base_random) return random_in_range(min, max);
+  int range       = max - min,
+    remainder   = RAND_MAX % range,
+    bucket      = RAND_MAX / range;
+  if (base_random < RAND_MAX - remainder) {
+    return min + base_random/bucket;
+  } else {
+    return random_in_range (min, max);
+  }
+}
 
 static void *
 disk_thread (void *arg)
@@ -313,6 +328,10 @@ disk_thread (void *arg)
   float buf_out[1];
   
   int count = 0;
+  int count1 = 0;
+  int count2 = 0;
+
+  float slow_speedmult=0.0;
  
   do
     {
@@ -322,9 +341,17 @@ disk_thread (void *arg)
 	     processing this soundfile */
 	  active_file_record[0][info[sample_num].bank_number] = 1;
 	  
-	  /* seek to beginning of file */
-	  sf_seek  (info[sample_num].sndfile, 0, SEEK_SET) ;
-	  
+	  /* seek to beginning of file, if playback is reversed seek to the end */
+	  if(info[sample_num].reverse)
+	    {
+	      sf_seek(info[sample_num].sndfile, sndfileinfo[sample_num].frames-1, SEEK_SET);
+	      info[sample_num].pos=sndfileinfo[sample_num].frames-1; 
+	    }
+	  else
+	    {
+	      sf_seek(info[sample_num].sndfile, 0, SEEK_SET);
+	      info[sample_num].pos=0;
+	    }
 	  while (1)
 	    { 
 	      read_frames=0;
@@ -342,8 +369,46 @@ disk_thread (void *arg)
 		{
 		  /* read ONE frame from our soundfile (4kb assumedly),
 		     sometimes it's good to be a slowpoke! */
-		  read_frames = sf_readf_float (info[sample_num].sndfile, buf_out, 1) ;
-		  
+		  read_frames = sf_readf_float (info[sample_num].sndfile, buf_out, 1);
+		  if(!info[sample_num].reverse)
+		    {
+		      if(info[sample_num].speedmult>1)
+			{
+			  info[sample_num].pos+=(int)(info[sample_num].speedmult);
+			  sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
+			  /* account for tenths and hundreths resolution of GREATER speed multiple */
+			  if(random_in_range(0,99)<((int)((info[sample_num].speedmult-(int)(info[sample_num].speedmult))*100)))
+			    {
+			      info[sample_num].pos++;
+			      sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
+			    }
+			}
+		      else
+			{
+			  info[sample_num].pos++;
+			  sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
+			}
+		    }
+		  else
+		    {
+		      if(info[sample_num].speedmult>1)
+			{
+			  info[sample_num].pos-=(int)info[sample_num].speedmult;
+			  sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
+			  /* account for tenths and hundreths resolution of GREATER speed multiple */
+			  if(random_in_range(0,99)<((int)((info[sample_num].speedmult-(int)(info[sample_num].speedmult))*100)))
+			    {
+			      info[sample_num].pos-=1;
+			      sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
+			    }
+			}
+		      else
+			{
+			  info[sample_num].pos-=1;
+			  sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
+			}
+		    }
+			      
 		  /* if no frames read, we assume the end of file.. */
 		  if (read_frames == 0)
 		    if(!info[sample_num].user_interrupt)
@@ -351,8 +416,22 @@ disk_thread (void *arg)
 		  
 		  /* fill playback queue with data  */
 		  for (count = 0; count < read_frames; count++)
-		    rtqueue_enq(fifo_out[info[sample_num].bank_number], buf_out[count]);
-		  
+		    {
+		      if(info[sample_num].speedmult<1)
+			{
+			  slow_speedmult=(1-info[sample_num].speedmult)*4;
+			  if(slow_speedmult>1)
+			    for(count1=0; count1<(int)slow_speedmult;count1++)
+			      rtqueue_enq(fifo_out[info[sample_num].bank_number],buf_out[count]);
+			  else
+			      rtqueue_enq(fifo_out[info[sample_num].bank_number],buf_out[count]);
+			  if( slow_speedmult-(int)slow_speedmult>0 || slow_speedmult==1)
+			    if(random_in_range(0,99)<(1-info[sample_num].speedmult)*100)
+			      rtqueue_enq(fifo_out[info[sample_num].bank_number],buf_out[count]);
+			}
+		      else
+			rtqueue_enq(fifo_out[info[sample_num].bank_number], buf_out[count]);
+		    }
 		  /* signal process thread there is data to process 
 		     from this sample bank */
 		  samples_can_process[info[sample_num].bank_number] = 1 ;
@@ -538,6 +617,18 @@ ficus_durationf_in( int bank_number )
 } /* ficus_durationf */
 
 void
+ficus_playback_speed(int bank_number, float speed)
+{
+  if(speed<0)
+    {
+      info[bank_number].reverse=1;
+      info[bank_number].speedmult=speed*(-1);
+    }
+  else
+    info[bank_number].speedmult=speed;
+} /* ficus_playback_reverse */
+
+void
 ficus_playback(int bank_number)
 {
 
@@ -546,6 +637,10 @@ ficus_playback(int bank_number)
     {
       info[bank_number].user_interrupt = 1 ;
       sf_seek  (info[bank_number].sndfile, 0, SEEK_SET) ;
+      if(info[bank_number].reverse)
+	info[bank_number].pos=sndfileinfo[bank_number].frames;
+      else
+	info[bank_number].pos=0;
     }
   else
     {
@@ -586,7 +681,8 @@ ficus_loadfile(char *path, int bank_number)
   info[bank_number].bank_number = bank_number;
   info[bank_number].user_interrupt = 0;
   info[bank_number].kill = 0;  
-  
+  info[bank_number].reverse = 0;
+  info[bank_number].speedmult = 1.0;
   return 0;
 } /* ficus_loadfile */
 

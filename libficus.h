@@ -32,6 +32,7 @@ int ficus_setmixin(int numsample, int channel, int state);
 int ficus_jackmonitor(int channel, int state);
 
 void ficus_playback(int bank_number);
+void ficus_playback_speed(int bank_number, float speed);
 int ficus_capture(int bank_number, int seconds);
 
 int ficus_capturef(int bank_number, int num_frames);
