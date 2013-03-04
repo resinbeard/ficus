@@ -25,7 +25,13 @@ gcc -o yourprogram yourprogram.c libficus.c -lsndfile -ljack
 Example Usage:
 See the 'examples/' directory.
 
-TODO (2/10/2013):
+NEW (2013/3/3)
+*New ficus_playback_peed(int bank_number,float speed) function
+     speed==0.01-0.99, Slow down sample playback
+     speed==1.01+, Increase sample playback
+     speed==1, Normal sample playback speed
+     speed==-(x), Negative speed represents reversed playback
+TODO (2013/3/3):
 *General code refactoring
 *Write documentation
-*Implement some midi capability (namely, triggered capturing of 'armed' samples)
+*Attack/Delay ramps for sample playback volume (click-eliminator/crossfader)
