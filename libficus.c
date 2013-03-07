@@ -393,22 +393,23 @@ disk_thread (void *arg)
 		    {
 		      if(info[sample_num].speedmult>1)
 			{
-			  info[sample_num].pos-=(int)info[sample_num].speedmult;
-			  sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
+			 
+			  if( (info[sample_num].pos-info[sample_num].speedmult-1)<0)
+			      info[sample_num].pos=sndfileinfo[sample_num].frames-1;
+			  else			  
+			    info[sample_num].pos-=(int)info[sample_num].speedmult;
+
 			  /* account for tenths and hundreths resolution of GREATER speed multiple */
 			  if(random_in_range(0,99)<((int)((info[sample_num].speedmult-(int)(info[sample_num].speedmult))*100)))
-			    {
-			      info[sample_num].pos-=1;
-			      sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
-			    }
+			    info[sample_num].pos-=1;
 			}
 		      else
-			{
-			  info[sample_num].pos-=1;
-			  sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
-			}
+			info[sample_num].pos-=1;
 		    }
-			      
+		  
+		  sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
+					  
+	      
 		  /* if no frames read, we assume the end of file.. */
 		  if (read_frames == 0)
 		    if(!info[sample_num].user_interrupt)
@@ -636,11 +637,16 @@ ficus_playback(int bank_number)
   if(active_file_record[0][bank_number])
     {
       info[bank_number].user_interrupt = 1 ;
-      sf_seek  (info[bank_number].sndfile, 0, SEEK_SET) ;
       if(info[bank_number].reverse)
-	info[bank_number].pos=sndfileinfo[bank_number].frames;
+	{
+	  info[bank_number].pos=sndfileinfo[bank_number].frames-1;
+	  sf_seek  (info[bank_number].sndfile, info[bank_number].pos, SEEK_SET) ;
+	}
       else
-	info[bank_number].pos=0;
+	{
+	  info[bank_number].pos=0;
+	  sf_seek  (info[bank_number].sndfile, 0, SEEK_SET) ;
+	}
     }
   else
     {

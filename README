@@ -25,13 +25,18 @@ gcc -o yourprogram yourprogram.c libficus.c -lsndfile -ljack
 Example Usage:
 See the 'examples/' directory.
 
-NEW (2013/3/3)
+NEW 
+(2013/3/6)
+*Fixed reversed playback speed >1.0 flipping playback speed
+
+(2013/3/3)
 *New ficus_playback_speed(int bank_number,float speed) function
      speed==0.01-0.99, Slow down sample playback
      speed==1.01+, Increase sample playback
      speed==1, Normal sample playback speed
      speed==-(x), Negative speed represents reversed playback
-TODO (2013/3/3):
+TODO (2013/3/6):
 *General code refactoring
 *Write documentation
+*Replace the current adjustable playback speed feature with a phase vocoder utilizing the fftw library
 *Attack/Delay ramps for sample playback volume (click-eliminator/crossfader)
