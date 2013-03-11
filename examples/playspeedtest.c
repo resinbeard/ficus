@@ -65,96 +65,35 @@ main (int narg, char * args [])
 
   fprintf(stderr, "\n11!!!\n\n");
   
-  /* playback audio from sample 0 */
-  ficus_playback(0);
-  fprintf(stderr, "\nPLAY BANK 0\n");
-  sleep(1);
-  
-  ficus_playback_speed(0,.25);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed change to .25\n");
-  sleep(2);
+  float uniqcount;
 
-  ficus_playback_speed(0, .5);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed change to .5.\n");
-  sleep(2);
+  for(uniqcount=0;uniqcount<10;uniqcount+=.01)
+    {
+      ficus_playback_speed(0,uniqcount*-1);
+      ficus_playback(0);
+      fprintf(stderr, "\nspeed of sample changed to %f", uniqcount);
+      usleep(50000);
+      if((uniqcount>1.5)&&(uniqcount<1.03))
+	sleep(2);
+      if((uniqcount>3)&&(uniqcount<3.03))
+	sleep(2);
+      if((uniqcount>4)&&(uniqcount<4.03))
+	sleep(1);
+      if((uniqcount>5)&&(uniqcount<5.03))
+	sleep(2);
+      if((uniqcount>6)&&(uniqcount<6.03))
+	sleep(2);
+      if((uniqcount>7)&&(uniqcount<7.03))
+	sleep(2);
+      if((uniqcount>8)&&(uniqcount<8.03))
+	sleep(1);
+      if((uniqcount>9)&&(uniqcount<9.03))
+	sleep(2);
+      if((uniqcount>9.97)&&(uniqcount<10.03))
+	sleep(2);
+    }
 
-  ficus_playback_speed(0, .75);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed change to .75\n");
-  sleep(3);
-  
-  ficus_playback_speed(0,1);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed change to 1.0\n");
-  sleep(2);
-
-  ficus_playback_speed(0,1.25);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed change to 1.25\n");
-  sleep(2);
-
-  ficus_playback_speed(0,1.5);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed change to 1.5\n");
-  sleep(3);
-
-  ficus_playback_speed(0,1.75);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed change to 1.75\n");
-  sleep(2);
-
-  ficus_playback_speed(0, 2);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed change to 2.0\n");
-  sleep(2);
-
-  ficus_playback_speed(0,-2);
-  ficus_playback(0);
-  fprintf(stderr, "\nsample 0 reversed.\n");
-  sleep(2);
-
-  ficus_playback_speed(0,-1.75);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed changed to 1.75.\n");
-  sleep(2);
-
-  ficus_playback_speed(0,-1.5);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed changed to 1.5.\n");
-  sleep(2);
-  
-  ficus_playback_speed(0,-1.25);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed changed to 1.25.\n");
-  sleep(2);
-
-  ficus_playback_speed(0,-1.0);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed changed to 1.0.\n");
-  sleep(2);
-  
-  ficus_playback_speed(0,-.75);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed changed to .75.\n");
-  sleep(2);
-  
-  ficus_playback_speed(0,-.5);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed changed to .5.\n");
-  sleep(2);
-  
-  ficus_playback_speed(0,-.25);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed changed to .25.\n");
-  sleep(2);
-  
-  ficus_playback_speed(0,0);
-  ficus_playback(0);
-  fprintf(stderr, "\nspeed changed to 0.");
-
-  sleep(30);
+  sleep(60);
   
   /* ficus teardown */
   ficus_clean();
