@@ -33,8 +33,11 @@ int ficus_jackmonitor(int channel, int state);
 
 void ficus_playback(int bank_number);
 void ficus_playback_speed(int bank_number, float speed);
-int ficus_capture(int bank_number, int seconds);
 
+void ficus_playback_rampup(int bank_number, float rampduration);
+void ficus_playback_rampdown(int bank_number, float rampduration);
+
+int ficus_capture(int bank_number, int seconds);
 int ficus_capturef(int bank_number, int num_frames);
 int ficus_durationf(int bank_number);
 
