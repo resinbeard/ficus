@@ -65,12 +65,17 @@ main (int narg, char * args [])
 
   fprintf(stderr, "\n11!!!\n\n");
   
-  ficus_playback_rampup(0,.5);
-  ficus_playback_rampdown(0,.02);
-  ficus_playback_speed(0, .8);
+  ficus_playback_rampup(0,.0001);
+  ficus_playback_rampdown(0,.0001);
+  ficus_playback_speed(0, -.5);
   ficus_playback(0);
 
-  sleep(30);
+  sleep(10);
+
+  ficus_playback_rampup(0,.5);
+  ficus_playback_rampdown(0,.5);
+  
+  sleep(60);
   
   /* ficus teardown */
   ficus_clean();

@@ -388,19 +388,10 @@ disk_thread (void *arg)
 			{
 			  /* advance frame position by the speed multiplier */
 			  info[sample_num].pos+=(int)(info[sample_num].speedmult);
-			  sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
+
 			  /* account for tenths and hundreths resolution of GREATER speed multiple */
 			  if(random_in_range(0,99)<((int)((info[sample_num].speedmult-(int)(info[sample_num].speedmult))*100)))
-			    {
-			      info[sample_num].pos++;
-			      sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
-			    }
-			}
-		      else
-			{
-			  /* if speed multiplier is 1 or slower than normal playback, advance position by 1 */
-			  info[sample_num].pos++;
-			  sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
+			    info[sample_num].pos++;
 			}
 		    }
 		  /* if playback is reversed.. */
@@ -410,7 +401,7 @@ disk_thread (void *arg)
 		      if(info[sample_num].speedmult>1)
 			{
 			  /* if we're about to fall off the edge of out sample */
-			  if( (info[sample_num].pos-info[sample_num].speedmult-1)<0)
+			  if( (int)(info[sample_num].pos-info[sample_num].speedmult-1)<0)
 			    /* reset frames to end of file */
 			      info[sample_num].pos=sndfileinfo[sample_num].frames-1;
 			  else
@@ -419,16 +410,33 @@ disk_thread (void *arg)
 
 			  /* account for tenths and hundreths resolution of GREATER speed multiple */
 			  if(random_in_range(0,99)<((int)((info[sample_num].speedmult-(int)(info[sample_num].speedmult))*100)))
+			    {
+			      if( (int)(info[sample_num].pos-1)<0)
+				info[sample_num].pos=sndfileinfo[sample_num].frames-1;
+			      else
+				info[sample_num].pos-=1;
+			    }
+			}
+		    }
+		
+		  if(info[sample_num].speedmult<=1)
+		    {
+		      if(info[sample_num].reverse)
+			{
+			  if((int)(info[sample_num].pos-1)<0)
+			    {
+			      info[sample_num].pos=sndfileinfo[sample_num].frames-1;
+			    }
+			  else
 			    info[sample_num].pos-=1;
 			}
 		      else
-			/* if playback speed is normal, or slower, decrement position by 1 */
-			info[sample_num].pos-=1;
+			info[sample_num].pos++;
 		    }
+
 		  /* finally, seek to new position in the soundfile */
 		  sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
-					  
-	      
+					  	      
 		  /* if no frames read, we assume the end of file.. */
 		  if (read_frames == 0)
 		    if(!info[sample_num].user_interrupt)
@@ -445,27 +453,48 @@ disk_thread (void *arg)
 			{
 			  /* figure out the length of the ramp */
 			  ramplength=sndfileinfo[sample_num].frames * info[sample_num].rampup;
-
+			  rampstart=sndfileinfo[sample_num].frames-ramplength;
 			  /* if the ramp is still in progress, calculate new value of frame */
-			  if( info[sample_num].pos<ramplength )
+			  if( info[sample_num].reverse==0 )
 			    {
-			      volume_factor=info[sample_num].pos/ramplength;
-			      buf_out[count]*=volume_factor;
+			      if( info[sample_num].pos<ramplength )
+				{
+				  /* calculate new value of frame */
+				  volume_factor=info[sample_num].pos/ramplength;
+				  buf_out[count]*=volume_factor;
+				}
 			    }
+			  else
+			    if( info[sample_num].pos>rampstart )
+			      {
+				/* calculate new value of frame */
+				volume_factor=(sndfileinfo[sample_num].frames-info[sample_num].pos)/ramplength;
+			        buf_out[count]*=volume_factor;
+			      }
 			}
+
 		      /* if this sample has a ramp UP envelope.. */
 		      if( info[sample_num].rampdown )
 			{
 			  /* figure out length and start of this envelope */
 			  ramplength=sndfileinfo[sample_num].frames * info[sample_num].rampdown;
-			  rampstart=sndfileinfo[sample_num].frames-ramplength;
+                          rampstart=sndfileinfo[sample_num].frames-ramplength;
 			  /* if this ramp has started.. */
-			  if( info[sample_num].pos>rampstart )
+			  if( info[sample_num].reverse==0 )
 			    {
-			      /* calculate new value of frame */
-			      volume_factor=(sndfileinfo[sample_num].frames-info[sample_num].pos)/ramplength;
-			      buf_out[count]*=volume_factor;
+			      if( info[sample_num].pos>rampstart )
+				{
+				  /* calculate new value of frame */
+				  volume_factor=(sndfileinfo[sample_num].frames-info[sample_num].pos)/ramplength;
+				  buf_out[count]*=volume_factor;
+				}
 			    }
+			  else
+			    if( info[sample_num].pos<ramplength )
+                              { 
+				volume_factor=info[sample_num].pos/ramplength;
+				buf_out[count]*=volume_factor;
+			      }
 			}
 
 		      /*
