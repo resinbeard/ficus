@@ -26,6 +26,11 @@ Example Usage:
 See the 'examples/' directory.
 
 NEW 
+(2013/3/11)
+*New ficus_playback_rampup(int bank_number, float rampduration);
+     ficus_playback_rampdown(int bank_number, float rampduration);
+     Set 'rampduration' to zero to turn off each ramp
+
 (2013/3/6)
 *Fixed reversed playback speed >1.0 flipping playback speed
 
@@ -39,4 +44,3 @@ TODO (2013/3/6):
 *General code refactoring
 *Write documentation
 *Replace the current adjustable playback speed feature with a phase vocoder utilizing the fftw library
-*Attack/Delay ramps for sample playback volume (click-eliminator/crossfader)
