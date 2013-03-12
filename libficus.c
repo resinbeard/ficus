@@ -55,6 +55,8 @@ typedef struct _thread_info
   volatile int kill;
   volatile int reverse;
   volatile float speedmult;
+  volatile float rampup;
+  volatile float rampdown;
 } thread_info_t ;
 
 typedef struct _thread_info_in
@@ -330,6 +332,9 @@ disk_thread (void *arg)
   int count = 0;
   int count1 = 0;
   int count2 = 0;
+  float ramplength = 0;
+  float rampstart = 0;
+  float volume_factor = 0;
 
   float slow_speedmult=0.0;
  
@@ -370,46 +375,68 @@ disk_thread (void *arg)
 		  /* read ONE frame from our soundfile (4kb assumedly),
 		     sometimes it's good to be a slowpoke! */
 		  read_frames = sf_readf_float (info[sample_num].sndfile, buf_out, 1);
+
+
+		  /*
+		    NORMAL PLAYBACK OR FASTER
+		   */
+		  /* if this sample's playback is NOT reversed.. */
 		  if(!info[sample_num].reverse)
 		    {
+		      /* if this sample's speed multiplier is greater than 1 */
 		      if(info[sample_num].speedmult>1)
 			{
+			  /* advance frame position by the speed multiplier */
 			  info[sample_num].pos+=(int)(info[sample_num].speedmult);
-			  sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
+
 			  /* account for tenths and hundreths resolution of GREATER speed multiple */
 			  if(random_in_range(0,99)<((int)((info[sample_num].speedmult-(int)(info[sample_num].speedmult))*100)))
-			    {
-			      info[sample_num].pos++;
-			      sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
-			    }
-			}
-		      else
-			{
-			  info[sample_num].pos++;
-			  sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
+			    info[sample_num].pos++;
 			}
 		    }
+		  /* if playback is reversed.. */
 		  else
 		    {
+		      /* if speed multiplier is greater than 1 */
 		      if(info[sample_num].speedmult>1)
 			{
-			 
-			  if( (info[sample_num].pos-info[sample_num].speedmult-1)<0)
+			  /* if we're about to fall off the edge of out sample */
+			  if( (int)(info[sample_num].pos-info[sample_num].speedmult-1)<0)
+			    /* reset frames to end of file */
 			      info[sample_num].pos=sndfileinfo[sample_num].frames-1;
-			  else			  
+			  else
+			    /* otherwise rewind our position in the soundfile */
 			    info[sample_num].pos-=(int)info[sample_num].speedmult;
 
 			  /* account for tenths and hundreths resolution of GREATER speed multiple */
 			  if(random_in_range(0,99)<((int)((info[sample_num].speedmult-(int)(info[sample_num].speedmult))*100)))
+			    {
+			      if( (int)(info[sample_num].pos-1)<0)
+				info[sample_num].pos=sndfileinfo[sample_num].frames-1;
+			      else
+				info[sample_num].pos-=1;
+			    }
+			}
+		    }
+		
+		  if(info[sample_num].speedmult<=1)
+		    {
+		      if(info[sample_num].reverse)
+			{
+			  if((int)(info[sample_num].pos-1)<0)
+			    {
+			      info[sample_num].pos=sndfileinfo[sample_num].frames-1;
+			    }
+			  else
 			    info[sample_num].pos-=1;
 			}
 		      else
-			info[sample_num].pos-=1;
+			info[sample_num].pos++;
 		    }
-		  
+
+		  /* finally, seek to new position in the soundfile */
 		  sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
-					  
-	      
+					  	      
 		  /* if no frames read, we assume the end of file.. */
 		  if (read_frames == 0)
 		    if(!info[sample_num].user_interrupt)
@@ -418,19 +445,78 @@ disk_thread (void *arg)
 		  /* fill playback queue with data  */
 		  for (count = 0; count < read_frames; count++)
 		    {
+		      /*
+			AMPLITUDE RAMPING
+		      */
+		      /* if this sample has a ramp DOWN envelope.. */
+		      if( info[sample_num].rampup )
+			{
+			  /* figure out the length of the ramp */
+			  ramplength=sndfileinfo[sample_num].frames * info[sample_num].rampup;
+			  rampstart=sndfileinfo[sample_num].frames-ramplength;
+			  /* if the ramp is still in progress, calculate new value of frame */
+			  if( info[sample_num].reverse==0 )
+			    {
+			      if( info[sample_num].pos<ramplength )
+				{
+				  /* calculate new value of frame */
+				  volume_factor=info[sample_num].pos/ramplength;
+				  buf_out[count]*=volume_factor;
+				}
+			    }
+			  else
+			    if( info[sample_num].pos>rampstart )
+			      {
+				/* calculate new value of frame */
+				volume_factor=(sndfileinfo[sample_num].frames-info[sample_num].pos)/ramplength;
+			        buf_out[count]*=volume_factor;
+			      }
+			}
+
+		      /* if this sample has a ramp UP envelope.. */
+		      if( info[sample_num].rampdown )
+			{
+			  /* figure out length and start of this envelope */
+			  ramplength=sndfileinfo[sample_num].frames * info[sample_num].rampdown;
+                          rampstart=sndfileinfo[sample_num].frames-ramplength;
+			  /* if this ramp has started.. */
+			  if( info[sample_num].reverse==0 )
+			    {
+			      if( info[sample_num].pos>rampstart )
+				{
+				  /* calculate new value of frame */
+				  volume_factor=(sndfileinfo[sample_num].frames-info[sample_num].pos)/ramplength;
+				  buf_out[count]*=volume_factor;
+				}
+			    }
+			  else
+			    if( info[sample_num].pos<ramplength )
+                              { 
+				volume_factor=info[sample_num].pos/ramplength;
+				buf_out[count]*=volume_factor;
+			      }
+			}
+
+		      /*
+			SLOW OR NORMAL PLAYBACK
+		      */
+		      /* if speed multiplier is less than 1.0.. */
 		      if(info[sample_num].speedmult<1)
 			{
+			  /* coarse calculation of frames to duplicate */
 			  slow_speedmult=(1-info[sample_num].speedmult)*4;
 			  if(slow_speedmult>1)
 			    for(count1=0; count1<(int)slow_speedmult;count1++)
 			      rtqueue_enq(fifo_out[info[sample_num].bank_number],buf_out[count]);
 			  else
 			      rtqueue_enq(fifo_out[info[sample_num].bank_number],buf_out[count]);
-			  if( slow_speedmult-(int)slow_speedmult>0 || slow_speedmult==1)
+			  /* fine calculation of frames to duplicate */
+			  if( slow_speedmult-(int)slow_speedmult>0)
 			    if(random_in_range(0,99)<(1-info[sample_num].speedmult)*100)
 			      rtqueue_enq(fifo_out[info[sample_num].bank_number],buf_out[count]);
 			}
 		      else
+			/* otherwise, queue a sample like normal */
 			rtqueue_enq(fifo_out[info[sample_num].bank_number], buf_out[count]);
 		    }
 		  /* signal process thread there is data to process 
@@ -655,7 +741,19 @@ ficus_playback(int bank_number)
       info[bank_number].kill = 0;
       pthread_detach(info[bank_number].thread_id);
     }
-} /* play_bank */
+} /* ficus_playback */
+
+void 
+ficus_playback_rampup(int bank_number, float rampduration)
+{
+  info[bank_number].rampup=rampduration;
+} /* ficus_playback_rampup */
+
+void 
+ficus_playback_rampdown(int bank_number, float rampduration)
+{
+  info[bank_number].rampdown=rampduration;
+} /* ficus_playback_rampdown */
 
 int
 ficus_loadfile(char *path, int bank_number)
@@ -689,6 +787,8 @@ ficus_loadfile(char *path, int bank_number)
   info[bank_number].kill = 0;  
   info[bank_number].reverse = 0;
   info[bank_number].speedmult = 1.0;
+  info[bank_number].rampup = 0.0;
+  info[bank_number].rampdown = 0.0;
   return 0;
 } /* ficus_loadfile */
 
