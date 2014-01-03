@@ -179,7 +179,11 @@ process (jack_nframes_t nframes, void * arg)
     {
       /* Queue incoming audio in case it needs to go to the disk */
       for (n = 0; n < NUM_CHANNELS; n++)
-	rtqueue_enq(fifo_in[n], ins[n][i]);
+	{
+          if (rtqueue_isfull(fifo_in[n]))
+            rtqueue_deq(fifo_in[n]);
+          rtqueue_enq(fifo_in[n], ins[n][i]);
+        }
 
       for (sample_count = 0; sample_count < NUM_SAMPLES; sample_count++)
 	{
