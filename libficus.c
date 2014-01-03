@@ -94,6 +94,8 @@ SF_INFO sndfileinfo_in[NUM_SAMPLES];
 
 /* allows disk_thread() to signal process() that there's data to read */
 int samples_can_process[NUM_SAMPLES] = {0};
+pthread_mutex_t samples_wait_process_mutex[NUM_SAMPLES];
+pthread_cond_t samples_wait_process_cond[NUM_SAMPLES];
 
 /* active file record for in/out of every sample,
    [0] is playback, [1] is capture */
@@ -204,7 +206,6 @@ process (jack_nframes_t nframes, void * arg)
 	  if ( rtqueue_isempty(fifo_out[sample_count]) 
 	       && samples_can_process[sample_count])
 	    {
-	      
 	      /* If yes, zero out this sample's buffers for this frame,
 		 (do we need to do this??) */ 
 	      sample = 0;
@@ -216,6 +217,9 @@ process (jack_nframes_t nframes, void * arg)
 	      {
 		/* If so, dequeue a frame for this sample */
 		sample = rtqueue_deq(fifo_out[sample_count]);
+
+		/* signal the disk thread to keep reading from disk */
+		pthread_cond_signal(&samples_wait_process_cond[sample]);
 	      }
 	  
 	  for(n = 0; n < NUM_CHANNELS; n++)
@@ -546,6 +550,13 @@ disk_thread (void *arg)
 		     from this sample bank */
 		  samples_can_process[info[sample_num].bank_number] = 1 ;
 		}
+	      else {
+		/* if the queue IS full and we're just waiting on the process callback(),
+		 we wait until space has been made */
+		pthread_mutex_lock(&samples_wait_process_mutex[sample_num]);
+		pthread_cond_wait(&samples_wait_process_cond[sample_num], &samples_wait_process_mutex[sample_num]);
+		pthread_mutex_unlock(&samples_wait_process_mutex[sample_num]);
+	      }
 	    } 
 	  if( info[sample_num].kill )
 	    break; 
@@ -555,6 +566,7 @@ disk_thread (void *arg)
       /* hang here until this sample finished playing */
       while( samples_can_process[sample_num] )
 	{
+	  /* if we retrigger or similar, we have to resume actions */
 	  if(info[sample_num].user_interrupt)
 	    break; 
 	}
