@@ -75,7 +75,8 @@ typedef struct _thread_info_in
   volatile int kill;
 }thread_info_in_t ;
 
-pthread_t capture_thread_id; 
+pthread_t capture_thread_id;
+int capture_thread_isrunning = 0; 
 
 const size_t sample_size = sizeof (jack_default_audio_sample_t) ;
 
@@ -115,6 +116,7 @@ long overruns = 0;
 rtqueue_t *fifo_out[NUM_SAMPLES];
 rtqueue_t *fifo_in[NUM_CHANNELS];
 
+int fifo_out_clear_thread_isrunning = 0;
 int fifo_out_clear_amount[NUM_SAMPLES]={0};
 int fifo_out_clear_sig[NUM_SAMPLES]={0};
 pthread_t fifo_out_clear_thread_id; 
@@ -137,17 +139,17 @@ void *
 clear_fifo_out_thread ()
 {
   int x;
-  while(1)
-    {
-      for(x=0;x<NUM_SAMPLES;x++)
-	if(fifo_out_clear_sig[x])
-	  {
-	    samples_can_process[x]=0;
-	    clear_fifo_out(x,rtqueue_numrecords(fifo_out[x]));
-	    fifo_out_clear_sig[x]=0;
-	    info[x].user_interrupt=0;
-	  }
-    }
+  fifo_out_clear_thread_isrunning = 1;
+  for(x=0;x<NUM_SAMPLES;x++)
+    if(fifo_out_clear_sig[x])
+      {
+	samples_can_process[x]=0;
+	clear_fifo_out(x,rtqueue_numrecords(fifo_out[x]));
+	fifo_out_clear_sig[x]=0;
+	info[x].user_interrupt=0;
+      }
+  fifo_out_clear_thread_isrunning = 0;
+  return;
 }
 
 static int
@@ -190,7 +192,13 @@ process (jack_nframes_t nframes, void * arg)
 	  sample = 0;	
 	  
 	  if( info[sample_count].user_interrupt )
-	    fifo_out_clear_sig[sample_count]=1;
+	    {
+	      fifo_out_clear_sig[sample_count]=1;
+	      if( fifo_out_clear_thread_isrunning == 0 ) {
+		pthread_create (&fifo_out_clear_thread_id, NULL, clear_fifo_out_thread, NULL);
+		pthread_detach(fifo_out_clear_thread_id);
+	      }
+	    }
 
 	  /* Has this queue run out of audio to process? */
 	  if ( rtqueue_isempty(fifo_out[sample_count]) 
@@ -238,6 +246,10 @@ disk_thread_in (void *arg)
 
   int i, c, n = 0;
   int write_count;
+  
+  capture_thread_isrunning = 1;
+  int wrote_to_file = 0;
+
   while (1)
     {
       for (i=0; i < NUM_CHANNELS; i++)
@@ -250,6 +262,7 @@ disk_thread_in (void *arg)
 	     write the buffered sample */
 	  if (info_in[c].can_capture == 1)
 	    {
+	      wrote_to_file = 1;
 	      /* let the world know that we're writing captured audio data */
 	      active_file_record[1][c] = 1;
 	      info_in[c].status = 0;
@@ -289,12 +302,18 @@ disk_thread_in (void *arg)
 		}
 	    }
 	}
-
       /* once in a while, check our jack overruns */
       if (overruns > 0)
 	{
 	  info_in[c].status = EPIPE;
 	}
+      if (wrote_to_file == 0) {
+	    break;
+      }
+
+      capture_thread_isrunning = 0;
+
+      return;
     }
   
   return 0;
@@ -657,6 +676,10 @@ ficus_capture ( int banknumber, int seconds)
 
   info_in[banknumber].can_capture = 1;
   info_in[banknumber].kill = 0;
+
+  if( capture_thread_isrunning == 0) {
+      pthread_create (&capture_thread_id, NULL, disk_thread_in, NULL);
+  }
 
   return 0;
 } /* ficus_capture */
@@ -1032,9 +1055,6 @@ ficus_setup(char *client_name, char *path, char *prefix, int bit_depth)
   connect_channels(NUM_CHANNELS, NUM_CHANNELS);
 
   setup_recbanks(path, prefix, bit_depth);
-  
-  pthread_create (&capture_thread_id, NULL, disk_thread_in, NULL);
-  pthread_create (&fifo_out_clear_thread_id, NULL, clear_fifo_out_thread, NULL);
 
   return 0;
 
@@ -1056,6 +1076,5 @@ ficus_clean()
   free (outs) ;
   free (output_port) ;
   free (input_port) ;
-
 
 } /* ficus_clean */
