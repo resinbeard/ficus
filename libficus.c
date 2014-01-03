@@ -96,6 +96,9 @@ SF_INFO sndfileinfo_in[NUM_SAMPLES];
 int samples_can_process[NUM_SAMPLES] = {0};
 pthread_mutex_t samples_wait_process_mutex[NUM_SAMPLES];
 pthread_cond_t samples_wait_process_cond[NUM_SAMPLES];
+int samples_finished_playing[NUM_SAMPLES] = {0};
+pthread_mutex_t samples_finished_playing_mutex[NUM_SAMPLES];
+pthread_cond_t samples_finished_playing_cond[NUM_SAMPLES];
 
 /* active file record for in/out of every sample,
    [0] is playback, [1] is capture */
@@ -206,10 +209,13 @@ process (jack_nframes_t nframes, void * arg)
 	  if ( rtqueue_isempty(fifo_out[sample_count]) 
 	       && samples_can_process[sample_count])
 	    {
-	      /* If yes, zero out this sample's buffers for this frame,
-		 (do we need to do this??) */ 
+	      /* If yes, zero out this sample's buffers for this frame */ 
 	      sample = 0;
 	      samples_can_process[sample_count] = 0;
+
+	      /* if this sample is waiting for its buffer to empty, signal it */
+	      if( samples_finished_playing[sample_count] )
+		pthread_cond_signal(&samples_finished_playing_cond[sample_count]);
 	    }
 	  else
 	    /* The buffer isn't empty, is there audio to process? */
@@ -219,7 +225,7 @@ process (jack_nframes_t nframes, void * arg)
 		sample = rtqueue_deq(fifo_out[sample_count]);
 
 		/* signal the disk thread to keep reading from disk */
-		pthread_cond_signal(&samples_wait_process_cond[sample]);
+		pthread_cond_signal(&samples_wait_process_cond[sample_count]);
 	      }
 	  
 	  for(n = 0; n < NUM_CHANNELS; n++)
@@ -563,12 +569,19 @@ disk_thread (void *arg)
 	}
       while( (loop_state[info[sample_num].bank_number]==1) );
 
-      /* hang here until this sample finished playing */
-      while( samples_can_process[sample_num] )
+      /* hang here until this sample has finished playing */
+      if( samples_can_process[sample_num] )
 	{
-	  /* if we retrigger or similar, we have to resume actions */
-	  if(info[sample_num].user_interrupt)
-	    break; 
+	  /* if the sample retriggers or something like that, we'll get a signal from functions
+	     ficus_playback() and ficus_killplayback() to resume thread execution */
+
+	  samples_finished_playing[sample_num] = 1;
+
+	  pthread_mutex_lock(&samples_finished_playing_mutex[sample_num]);
+	  pthread_cond_wait(&samples_finished_playing_cond[sample_num], &samples_finished_playing_mutex[sample_num]);
+	  pthread_mutex_unlock(&samples_finished_playing_mutex[sample_num]);
+
+	  samples_finished_playing[sample_num] = 0;
 	}
       if( info[sample_num].kill )
 	{
@@ -762,6 +775,9 @@ ficus_playback(int bank_number)
   if(active_file_record[0][bank_number])
     {
       info[bank_number].user_interrupt = 1 ;
+
+      if( samples_finished_playing[bank_number] )
+	pthread_cond_signal(&samples_finished_playing_cond[bank_number]);
       if(info[bank_number].reverse)
 	{
 	  info[bank_number].pos=sndfileinfo[bank_number].frames-1;
@@ -907,6 +923,9 @@ ficus_killplayback (int banknumber)
   /* Set this sample's playback to die. */
   info[banknumber].user_interrupt = 1;
   info[banknumber].kill = 1;
+
+  if( samples_finished_playing[banknumber] )
+    pthread_cond_signal(&samples_finished_playing_cond[banknumber]);
 
   return 0;
 } /* ficus_killplayback */
