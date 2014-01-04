@@ -77,6 +77,8 @@ typedef struct _thread_info_in
 
 pthread_t capture_thread_id;
 int capture_thread_isrunning = 0; 
+pthread_mutex_t capture_thread_wait_mutex;
+pthread_cond_t capture_thread_wait_cond;
 
 const size_t sample_size = sizeof (jack_default_audio_sample_t) ;
 
@@ -175,7 +177,7 @@ interrupt_clear_fifo_out (int sample_count)
 } /* interrupt_clear_fifo_out */
 
 static int
-process (jack_nframes_t nframes, void * arg)
+process(jack_nframes_t nframes, void * arg)
 {
 
   /* this is the function to be registered as 
@@ -206,8 +208,6 @@ process (jack_nframes_t nframes, void * arg)
 	/* Queue incoming audio in case it needs to go to the disk */
 	for (n = 0; n < NUM_CHANNELS; n++)
 	  {
-	    if (rtqueue_isfull(fifo_in[n]))
-	      rtqueue_deq(fifo_in[n]);
 	    rtqueue_enq(fifo_in[n], ins[n][i]);
 	  }
       
@@ -271,14 +271,16 @@ disk_thread_in (void *arg)
 
   int i, c, n = 0;
   int write_count;
+  int wrote_to_file;
   
   capture_thread_isrunning = 1;
-  int wrote_to_file = 0;
 
   while (1)
     {
       for (i=0; i < NUM_CHANNELS; i++)
 	channelbuf[i] = rtqueue_deq(fifo_in[i]);
+
+      wrote_to_file = 0;
 
       /* number of banks we could possibly record to */
       for (c=0; c < NUM_SAMPLES; c++)
@@ -288,6 +290,7 @@ disk_thread_in (void *arg)
 	  if (info_in[c].can_capture == 1)
 	    {
 	      wrote_to_file = 1;
+
 	      /* let the world know that we're writing captured audio data */
 	      active_file_record[1][c] = 1;
 	      info_in[c].status = 0;
@@ -332,14 +335,16 @@ disk_thread_in (void *arg)
 	{
 	  info_in[c].status = EPIPE;
 	}
+
       if (wrote_to_file == 0) 
 	{
-	  break;
+	  fprintf(stderr, "SHITHAWK");
+	  capture_thread_isrunning = 0;
+	  pthread_mutex_lock(&capture_thread_wait_mutex);
+	  pthread_cond_wait(&capture_thread_wait_cond, &capture_thread_wait_mutex);
+	  pthread_mutex_unlock(&capture_thread_wait_mutex); 
+	  capture_thread_isrunning = 1;
 	}
-
-      capture_thread_isrunning = 0;
-
-      return;
     }
   
   return 0;
@@ -714,11 +719,10 @@ ficus_capture ( int banknumber, int seconds)
   else
     info_in[banknumber].duration *= jack_sr;
 
-  info_in[banknumber].can_capture = 1;
   info_in[banknumber].kill = 0;
+  info_in[banknumber].can_capture = 1;
 
-  if( capture_thread_isrunning == 0) 
-    pthread_create (&capture_thread_id, NULL, disk_thread_in, NULL);
+  pthread_cond_signal(&capture_thread_wait_cond);
 
   return 0;
 } /* ficus_capture */
@@ -1000,7 +1004,7 @@ set_callbacks()
 int
 activate_client()
 {
-  /* Activatexo client. */
+  /* Activate client. */
   if (jack_activate (client))
     {	
       fprintf (stderr, "Cannot activate client.\n") ;
@@ -1107,6 +1111,8 @@ ficus_setup(char *client_name, char *path, char *prefix, int bit_depth)
   connect_channels(NUM_CHANNELS, NUM_CHANNELS);
 
   setup_recbanks(path, prefix, bit_depth);
+
+  pthread_create (&capture_thread_id, NULL, disk_thread_in, NULL);
 
   return 0;
 
