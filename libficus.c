@@ -94,6 +94,7 @@ SF_INFO sndfileinfo_in[NUM_SAMPLES];
 
 /* allows disk_thread() to signal process() that there's data to read */
 int samples_can_process[NUM_SAMPLES] = {0};
+int samples_wait_process[NUM_SAMPLES] = {0};
 pthread_mutex_t samples_wait_process_mutex[NUM_SAMPLES];
 pthread_cond_t samples_wait_process_cond[NUM_SAMPLES];
 int samples_finished_playing[NUM_SAMPLES] = {0};
@@ -149,13 +150,29 @@ clear_fifo_out_thread ()
     if(fifo_out_clear_sig[x])
       {
 	samples_can_process[x]=0;
-	clear_fifo_out(x,rtqueue_numrecords(fifo_out[x]));
+	clear_fifo_out(x,fifo_out_clear_amount[x]);
 	fifo_out_clear_sig[x]=0;
 	info[x].user_interrupt=0;
       }
   fifo_out_clear_thread_isrunning = 0;
   return;
 }
+
+void *
+interrupt_clear_fifo_out (int sample_count)
+{
+  fifo_out_clear_amount[sample_count] = rtqueue_numrecords(fifo_out[sample_count]) + 1;
+  if( info[sample_count].user_interrupt )
+    {
+      fifo_out_clear_sig[sample_count]=1;
+      if( fifo_out_clear_thread_isrunning == 0 ) 
+	{
+	  pthread_create (&fifo_out_clear_thread_id, NULL, clear_fifo_out_thread, NULL);
+	  pthread_detach(fifo_out_clear_thread_id);
+	}
+    }
+  return;
+} /* interrupt_clear_fifo_out */
 
 static int
 process (jack_nframes_t nframes, void * arg)
@@ -198,16 +215,8 @@ process (jack_nframes_t nframes, void * arg)
 	{
 	  sample = 0;	
 	  
-	  if( info[sample_count].user_interrupt )
-	    {
-	      fifo_out_clear_sig[sample_count]=1;
-	      if( fifo_out_clear_thread_isrunning == 0 ) 
-		{
-		  pthread_create (&fifo_out_clear_thread_id, NULL, clear_fifo_out_thread, NULL);
-		  pthread_detach(fifo_out_clear_thread_id);
-		}
-	    }
-	  
+	  interrupt_clear_fifo_out(sample_count);
+
 	  if( samples_can_process[sample_count] ) 
 	    {
 	      /* Has this queue run out of audio to process? */
@@ -224,15 +233,16 @@ process (jack_nframes_t nframes, void * arg)
 		}
 	      else
 		/* The disk_thread says there's audio to process, let's check */
-		if (samples_can_process[sample_count] && (info[sample_count].user_interrupt==0))
+		if (samples_can_process[sample_count]) //&& (info[sample_count].user_interrupt==0))
 		  {
-		    /* If so, dequeue a frame for this sample */
-		    sample = rtqueue_deq(fifo_out[sample_count]);
-		    
+		    if( info[sample_count].user_interrupt == 0 )
+		      /* If so, dequeue a frame for this sample */
+		      sample = rtqueue_deq(fifo_out[sample_count]);
+	    
 		    /* signal the disk thread to keep reading from disk */
 		    pthread_cond_signal(&samples_wait_process_cond[sample_count]);
 		  }
-	      
+
 	      for(n = 0; n < NUM_CHANNELS; n++)
 		{
 		  /* Check to make sure we can output thru this channel, then do/don't */
@@ -408,185 +418,185 @@ disk_thread (void *arg)
 		  break;
 		}  
 	      
-	      /* if the playback queue is NOT full */
-	      if ( (rtqueue_isfull(fifo_out[info[sample_num].bank_number]) == 0) )
+	      /* if the queue IS full and we're just waiting on the process callback(),
+	       we wait until space has been made */
+	      if ( (rtqueue_isfull(fifo_out[info[sample_num].bank_number]) == 1) )
 		{
-		  /* read ONE frame from our soundfile (4kb assumedly),
-		     sometimes it's good to be a slowpoke! */
-		  read_frames = sf_readf_float (info[sample_num].sndfile, buf_out, 1);
-
-
-		  /*
-		    NORMAL PLAYBACK OR FASTER
-		   */
-		  /* if this sample's playback is NOT reversed.. */
-		  if(!info[sample_num].reverse)
+		  samples_wait_process[sample_num] = 1;
+		  pthread_mutex_lock(&samples_wait_process_mutex[sample_num]);
+		  pthread_cond_wait(&samples_wait_process_cond[sample_num], &samples_wait_process_mutex[sample_num]);
+		  pthread_mutex_unlock(&samples_wait_process_mutex[sample_num]);
+		  samples_wait_process[sample_num] = 0;
+		}
+	      
+	      /* read ONE frame from our soundfile (4kb assumedly),
+		 sometimes it's good to be a slowpoke! */
+	      read_frames = sf_readf_float (info[sample_num].sndfile, buf_out, 1);
+	      
+	      /*
+		NORMAL PLAYBACK OR FASTER
+	      */
+	      /* if this sample's playback is NOT reversed.. */
+	      if(!info[sample_num].reverse)
+		{
+		  /* if this sample's speed multiplier is greater than 1 */
+		  if(info[sample_num].speedmult>1)
 		    {
-		      /* if this sample's speed multiplier is greater than 1 */
-		      if(info[sample_num].speedmult>1)
-			{
-			  /* advance frame position by the speed multiplier */
-			  info[sample_num].pos+=(int)(info[sample_num].speedmult);
-
-			  /* account for tenths and hundreths resolution of GREATER speed multiple */
-			  if(random_in_range(0,99)<((int)((info[sample_num].speedmult-(int)(info[sample_num].speedmult))*100)))
-			    info[sample_num].pos++;
-			}
+		      /* advance frame position by the speed multiplier */
+		      info[sample_num].pos+=(int)(info[sample_num].speedmult);
+		      
+		      /* account for tenths and hundreths resolution of GREATER speed multiple */
+		      if(random_in_range(0,99)<((int)((info[sample_num].speedmult-(int)(info[sample_num].speedmult))*100)))
+			info[sample_num].pos++;
 		    }
-		  /* if playback is reversed.. */
-		  else
+		}
+	      /* if playback is reversed.. */
+	      else
+		{
+		  /* if speed multiplier is greater than 1 */
+		  if(info[sample_num].speedmult>1)
 		    {
-		      /* if speed multiplier is greater than 1 */
-		      if(info[sample_num].speedmult>1)
+		      /* if we're about to fall off the edge of out sample */
+		      if( (int)(info[sample_num].pos-info[sample_num].speedmult-1)<0)
+			/* reset frames to end of file */
+			info[sample_num].pos=sndfileinfo[sample_num].frames-1;
+		      else
+			/* otherwise rewind our position in the soundfile */
+			info[sample_num].pos-=(int)info[sample_num].speedmult;
+		      
+		      /* account for tenths and hundreths resolution of GREATER speed multiple */
+		      if(random_in_range(0,99)<((int)((info[sample_num].speedmult-(int)(info[sample_num].speedmult))*100)))
 			{
-			  /* if we're about to fall off the edge of out sample */
-			  if( (int)(info[sample_num].pos-info[sample_num].speedmult-1)<0)
-			    /* reset frames to end of file */
-			      info[sample_num].pos=sndfileinfo[sample_num].frames-1;
-			  else
-			    /* otherwise rewind our position in the soundfile */
-			    info[sample_num].pos-=(int)info[sample_num].speedmult;
-
-			  /* account for tenths and hundreths resolution of GREATER speed multiple */
-			  if(random_in_range(0,99)<((int)((info[sample_num].speedmult-(int)(info[sample_num].speedmult))*100)))
-			    {
-			      if( (int)(info[sample_num].pos-1)<0)
-				info[sample_num].pos=sndfileinfo[sample_num].frames-1;
-			      else
-				info[sample_num].pos-=1;
-			    }
-			}
-		    }
-		
-		  if(info[sample_num].speedmult<=1)
-		    {
-		      if(info[sample_num].reverse)
-			{
-			  if((int)(info[sample_num].pos-1)<0)
-			    {
-			      info[sample_num].pos=sndfileinfo[sample_num].frames-1;
-			    }
+			  if( (int)(info[sample_num].pos-1)<0)
+			    info[sample_num].pos=sndfileinfo[sample_num].frames-1;
 			  else
 			    info[sample_num].pos-=1;
 			}
-		      else
-			info[sample_num].pos++;
 		    }
-
-		  /* finally, seek to new position in the soundfile */
-		  sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
-					  	      
-		  /* if no frames read, we assume the end of file.. */
-		  if (read_frames == 0)
-		    if(!info[sample_num].user_interrupt)
-		      break ;
-		  
-		  /* fill playback queue with data  */
-		  for (count = 0; count < read_frames; count++)
-		    {
-		      /*
-			AMPLITUDE RAMPING
-		      */
-		      /* if this sample has a ramp DOWN envelope.. */
-		      if( info[sample_num].rampup )
-			{
-			  /* figure out the length of the ramp */
-			  ramplength=sndfileinfo[sample_num].frames * info[sample_num].rampup;
-			  rampstart=sndfileinfo[sample_num].frames-ramplength;
-			  /* if the ramp is still in progress, calculate new value of frame */
-			  if( info[sample_num].reverse==0 )
-			    {
-			      if( info[sample_num].pos<ramplength )
-				{
-				  /* calculate new value of frame */
-				  volume_factor=info[sample_num].pos/ramplength;
-				  buf_out[count]*=volume_factor;
-				}
-			    }
-			  else
-			    if( info[sample_num].pos>rampstart )
-			      {
-				/* calculate new value of frame */
-				volume_factor=(sndfileinfo[sample_num].frames-info[sample_num].pos)/ramplength;
-			        buf_out[count]*=volume_factor;
-			      }
-			}
-
-		      /* if this sample has a ramp UP envelope.. */
-		      if( info[sample_num].rampdown )
-			{
-			  /* figure out length and start of this envelope */
-			  ramplength=sndfileinfo[sample_num].frames * info[sample_num].rampdown;
-                          rampstart=sndfileinfo[sample_num].frames-ramplength;
-			  /* if this ramp has started.. */
-			  if( info[sample_num].reverse==0 )
-			    {
-			      if( info[sample_num].pos>rampstart )
-				{
-				  /* calculate new value of frame */
-				  volume_factor=(sndfileinfo[sample_num].frames-info[sample_num].pos)/ramplength;
-				  buf_out[count]*=volume_factor;
-				}
-			    }
-			  else
-			    if( info[sample_num].pos<ramplength )
-                              { 
-				volume_factor=info[sample_num].pos/ramplength;
-				buf_out[count]*=volume_factor;
-			      }
-			}
-		      
-		      /*
-			SLOW OR NORMAL PLAYBACK
-		      */
-		      /* if speed multiplier is less than 1.0.. */
-		      if(info[sample_num].speedmult<1)
-			{
-			  /* coarse calculation of frames to duplicate */
-			  slow_speedmult=(1-info[sample_num].speedmult)*4;
-			  if(slow_speedmult>1)
-			    for(count1=0; count1<(int)slow_speedmult;count1++)
-			      rtqueue_enq(fifo_out[info[sample_num].bank_number],buf_out[count]);
-			  else
-			      rtqueue_enq(fifo_out[info[sample_num].bank_number],buf_out[count]);
-			  /* fine calculation of frames to duplicate */
-			  if( slow_speedmult-(int)slow_speedmult>0)
-			    if(random_in_range(0,99)<(1-info[sample_num].speedmult)*100)
-			      rtqueue_enq(fifo_out[info[sample_num].bank_number],buf_out[count]);
-			}
-		      else
-			/* otherwise, queue a sample like normal */
-			rtqueue_enq(fifo_out[info[sample_num].bank_number], buf_out[count]);
-		    }
-		  /* signal process thread there is data to process 
-		     from this sample bank */
-		  samples_can_process[info[sample_num].bank_number] = 1 ;
 		}
-	      else {
-		/* if the queue IS full and we're just waiting on the process callback(),
-		 we wait until space has been made */
-		pthread_mutex_lock(&samples_wait_process_mutex[sample_num]);
-		pthread_cond_wait(&samples_wait_process_cond[sample_num], &samples_wait_process_mutex[sample_num]);
-		pthread_mutex_unlock(&samples_wait_process_mutex[sample_num]);
-	      }
+	      
+	      if(info[sample_num].speedmult<=1)
+		{
+		  if(info[sample_num].reverse)
+		    {
+		      if((int)(info[sample_num].pos-1)<0)
+			{
+			  info[sample_num].pos=sndfileinfo[sample_num].frames-1;
+			}
+		      else
+			info[sample_num].pos-=1;
+		    }
+		  else
+		    info[sample_num].pos++;
+		}
+	      
+	      /* finally, seek to new position in the soundfile */
+	      sf_seek(info[sample_num].sndfile,info[sample_num].pos,SEEK_SET);
+	      
+	      /* if no frames read, we assume the end of file.. */
+	      if (read_frames == 0)
+		if(!info[sample_num].user_interrupt)
+		  break ;
+	      
+	      /* fill playback queue with data  */
+	      for (count = 0; count < read_frames; count++)
+		{
+		  /*
+		    AMPLITUDE RAMPING
+		  */
+		  /* if this sample has a ramp DOWN envelope.. */
+		  if( info[sample_num].rampup )
+		    {
+		      /* figure out the length of the ramp */
+		      ramplength=sndfileinfo[sample_num].frames * info[sample_num].rampup;
+		      rampstart=sndfileinfo[sample_num].frames-ramplength;
+		      /* if the ramp is still in progress, calculate new value of frame */
+		      if( info[sample_num].reverse==0 )
+			{
+			  if( info[sample_num].pos<ramplength )
+			    {
+			      /* calculate new value of frame */
+			      volume_factor=info[sample_num].pos/ramplength;
+			      buf_out[count]*=volume_factor;
+			    }
+			}
+		      else
+			if( info[sample_num].pos>rampstart )
+			  {
+			    /* calculate new value of frame */
+			    volume_factor=(sndfileinfo[sample_num].frames-info[sample_num].pos)/ramplength;
+			    buf_out[count]*=volume_factor;
+			  }
+		    }
+		  
+		  /* if this sample has a ramp UP envelope.. */
+		  if( info[sample_num].rampdown )
+		    {
+		      /* figure out length and start of this envelope */
+		      ramplength=sndfileinfo[sample_num].frames * info[sample_num].rampdown;
+		      rampstart=sndfileinfo[sample_num].frames-ramplength;
+		      /* if this ramp has started.. */
+		      if( info[sample_num].reverse==0 )
+			{
+			  if( info[sample_num].pos>rampstart )
+			    {
+			      /* calculate new value of frame */
+			      volume_factor=(sndfileinfo[sample_num].frames-info[sample_num].pos)/ramplength;
+			      buf_out[count]*=volume_factor;
+			    }
+			}
+		      else
+			if( info[sample_num].pos<ramplength )
+			  { 
+			    volume_factor=info[sample_num].pos/ramplength;
+			    buf_out[count]*=volume_factor;
+			  }
+		    }
+		  
+		  /*
+		    SLOW OR NORMAL PLAYBACK
+		  */
+		  /* if speed multiplier is less than 1.0.. */
+		  if(info[sample_num].speedmult<1)
+		    {
+		      /* coarse calculation of frames to duplicate */
+		      slow_speedmult=(1-info[sample_num].speedmult)*4;
+		      if(slow_speedmult>1)
+			for(count1=0; count1<(int)slow_speedmult;count1++)
+			  rtqueue_enq(fifo_out[info[sample_num].bank_number],buf_out[count]);
+		      else
+			rtqueue_enq(fifo_out[info[sample_num].bank_number],buf_out[count]);
+		      /* fine calculation of frames to duplicate */
+		      if( slow_speedmult-(int)slow_speedmult>0)
+			if(random_in_range(0,99)<(1-info[sample_num].speedmult)*100)
+			  rtqueue_enq(fifo_out[info[sample_num].bank_number],buf_out[count]);
+		    }
+		  else
+		    /* otherwise, queue a sample like normal */
+		    rtqueue_enq(fifo_out[info[sample_num].bank_number], buf_out[count]);
+		}
+	      /* signal process thread there is data to process 
+		 from this sample bank */
+	      samples_can_process[info[sample_num].bank_number] = 1 ;
 	    }
+	  
 	  if( info[sample_num].kill )
 	    break;
 	}
       while( (loop_state[info[sample_num].bank_number]==1) );
-
+      
       /* hang here until this sample has finished playing */
       if( samples_can_process[sample_num] )
 	{
 	  /* if the sample retriggers or something like that, we'll get a signal from functions
 	     ficus_playback() and ficus_killplayback() to resume thread execution */
-
+	  
 	  samples_finished_playing[sample_num] = 1;
-
+	  
 	  pthread_mutex_lock(&samples_finished_playing_mutex[sample_num]);
 	  pthread_cond_wait(&samples_finished_playing_cond[sample_num], &samples_finished_playing_mutex[sample_num]);
 	  pthread_mutex_unlock(&samples_finished_playing_mutex[sample_num]);
-
+	  
 	  samples_finished_playing[sample_num] = 0;
 	}
       if( info[sample_num].kill )
@@ -596,10 +606,10 @@ disk_thread (void *arg)
 	}
     }
   while( info[sample_num].user_interrupt);
-
+  
   /* done with this sample bank! */
   active_file_record[0][sample_num] = 0;
-
+  
   return 0 ;
 } /* disk_thread */
 
@@ -782,6 +792,10 @@ ficus_playback(int bank_number)
 
       if( samples_finished_playing[bank_number] )
 	pthread_cond_signal(&samples_finished_playing_cond[bank_number]);
+
+      if( samples_wait_process[bank_number] )
+	pthread_cond_signal(&samples_wait_process_cond[bank_number]);
+
       if(info[bank_number].reverse)
 	{
 	  info[bank_number].pos=sndfileinfo[bank_number].frames-1;
@@ -931,6 +945,9 @@ ficus_killplayback (int banknumber)
   if( samples_finished_playing[banknumber] )
     pthread_cond_signal(&samples_finished_playing_cond[banknumber]);
 
+  if( samples_wait_process[banknumber] )
+    pthread_cond_signal(&samples_wait_process_cond[banknumber]);
+  
   return 0;
 } /* ficus_killplayback */
 
