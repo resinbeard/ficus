@@ -177,21 +177,23 @@ process (jack_nframes_t nframes, void * arg)
   /* allocate all output buffers */
   for(i = 0; i < NUM_CHANNELS; i++)
     {
-      outs [i] = jack_port_get_buffer (output_port[i], nframes) ;
-      ins [i] = jack_port_get_buffer (input_port[i], nframes);
+      outs [i] = jack_port_get_buffer (output_port[i], nframes);
       memset(outs[i], 0, nframes * sample_size);
-    }      
+      if( capture_thread_isrunning )
+	ins [i] = jack_port_get_buffer (input_port[i], nframes);
+    }
 
   for ( i = 0; i < nframes; i++)
     {
-      /* Queue incoming audio in case it needs to go to the disk */
-      for (n = 0; n < NUM_CHANNELS; n++)
-	{
-          if (rtqueue_isfull(fifo_in[n]))
-            rtqueue_deq(fifo_in[n]);
-          rtqueue_enq(fifo_in[n], ins[n][i]);
-        }
-
+      if( capture_thread_isrunning == 1)
+	/* Queue incoming audio in case it needs to go to the disk */
+	for (n = 0; n < NUM_CHANNELS; n++)
+	  {
+	    if (rtqueue_isfull(fifo_in[n]))
+	      rtqueue_deq(fifo_in[n]);
+	    rtqueue_enq(fifo_in[n], ins[n][i]);
+	  }
+      
       for (sample_count = 0; sample_count < NUM_SAMPLES; sample_count++)
 	{
 	  sample = 0;	
@@ -199,41 +201,44 @@ process (jack_nframes_t nframes, void * arg)
 	  if( info[sample_count].user_interrupt )
 	    {
 	      fifo_out_clear_sig[sample_count]=1;
-	      if( fifo_out_clear_thread_isrunning == 0 ) {
-		pthread_create (&fifo_out_clear_thread_id, NULL, clear_fifo_out_thread, NULL);
-		pthread_detach(fifo_out_clear_thread_id);
-	      }
+	      if( fifo_out_clear_thread_isrunning == 0 ) 
+		{
+		  pthread_create (&fifo_out_clear_thread_id, NULL, clear_fifo_out_thread, NULL);
+		  pthread_detach(fifo_out_clear_thread_id);
+		}
 	    }
-
-	  /* Has this queue run out of audio to process? */
-	  if ( rtqueue_isempty(fifo_out[sample_count]) 
-	       && samples_can_process[sample_count])
-	    {
-	      /* If yes, zero out this sample's buffers for this frame */ 
-	      sample = 0;
-	      samples_can_process[sample_count] = 0;
-
-	      /* if this sample is waiting for its buffer to empty, signal it */
-	      if( samples_finished_playing[sample_count] )
-		pthread_cond_signal(&samples_finished_playing_cond[sample_count]);
-	    }
-	  else
-	    /* The buffer isn't empty, is there audio to process? */
-	    if (samples_can_process[sample_count] && (info[sample_count].user_interrupt==0))
-	      {
-		/* If so, dequeue a frame for this sample */
-		sample = rtqueue_deq(fifo_out[sample_count]);
-
-		/* signal the disk thread to keep reading from disk */
-		pthread_cond_signal(&samples_wait_process_cond[sample_count]);
-	      }
 	  
-	  for(n = 0; n < NUM_CHANNELS; n++)
+	  if( samples_can_process[sample_count] ) 
 	    {
-	      /* Check to make sure we can output thru this channel */
-	      if(playback_mix[sample_count][n] == 1)
-		/* If we can, set buffer to 0 for this frame*/
-		outs[n][i] += sample;
+	      /* Has this queue run out of audio to process? */
+	      if ( rtqueue_isempty(fifo_out[sample_count]) 
+		   && samples_can_process[sample_count])
+		{
+		  /* If yes, zero out this sample's buffers for this frame */ 
+		  sample = 0;
+		  samples_can_process[sample_count] = 0;
+		  
+		  /* if this sample is waiting for its buffer to empty, signal it */
+		  if( samples_finished_playing[sample_count] )
+		    pthread_cond_signal(&samples_finished_playing_cond[sample_count]);
+		}
+	      else
+		/* The disk_thread says there's audio to process, let's check */
+		if (samples_can_process[sample_count] && (info[sample_count].user_interrupt==0))
+		  {
+		    /* If so, dequeue a frame for this sample */
+		    sample = rtqueue_deq(fifo_out[sample_count]);
+		    
+		    /* signal the disk thread to keep reading from disk */
+		    pthread_cond_signal(&samples_wait_process_cond[sample_count]);
+		  }
+	      
+	      for(n = 0; n < NUM_CHANNELS; n++)
+		{
+		  /* Check to make sure we can output thru this channel, then do/don't */
+		  if(playback_mix[sample_count][n] == 1)
+		    outs[n][i] += sample;
+		}
 	    }
 	}
     }
@@ -317,9 +322,10 @@ disk_thread_in (void *arg)
 	{
 	  info_in[c].status = EPIPE;
 	}
-      if (wrote_to_file == 0) {
-	    break;
-      }
+      if (wrote_to_file == 0) 
+	{
+	  break;
+	}
 
       capture_thread_isrunning = 0;
 
@@ -529,7 +535,7 @@ disk_thread (void *arg)
 				buf_out[count]*=volume_factor;
 			      }
 			}
-
+		      
 		      /*
 			SLOW OR NORMAL PLAYBACK
 		      */
@@ -563,9 +569,9 @@ disk_thread (void *arg)
 		pthread_cond_wait(&samples_wait_process_cond[sample_num], &samples_wait_process_mutex[sample_num]);
 		pthread_mutex_unlock(&samples_wait_process_mutex[sample_num]);
 	      }
-	    } 
+	    }
 	  if( info[sample_num].kill )
-	    break; 
+	    break;
 	}
       while( (loop_state[info[sample_num].bank_number]==1) );
 
@@ -588,7 +594,6 @@ disk_thread (void *arg)
 	  info[sample_num].kill = 0;
 	  break;
 	}
-
     }
   while( info[sample_num].user_interrupt);
 
@@ -702,9 +707,8 @@ ficus_capture ( int banknumber, int seconds)
   info_in[banknumber].can_capture = 1;
   info_in[banknumber].kill = 0;
 
-  if( capture_thread_isrunning == 0) {
-      pthread_create (&capture_thread_id, NULL, disk_thread_in, NULL);
-  }
+  if( capture_thread_isrunning == 0) 
+    pthread_create (&capture_thread_id, NULL, disk_thread_in, NULL);
 
   return 0;
 } /* ficus_capture */
