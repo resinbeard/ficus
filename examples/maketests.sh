@@ -12,3 +12,4 @@ rm libficus.c
 rm libficus.h
 rm rtqueue.h
 rm config.h 
+mkdir capturedwavs

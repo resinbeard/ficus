@@ -40,24 +40,32 @@ main (int narg, char * args [])
   
   ficus_loop(0, 1);
   fprintf(stderr, "\nLOOP BANK 0\n");
-  
+  ficus_loop(8, 1);
+  fprintf(stderr, "\nLOOP BANK 7\n");
+
+  ficus_setmixin(0, 0, 1);
+  ficus_setmixin(8, 1, 1);
+
   ficus_capture(0, 6);
   fprintf(stderr, "\nRECORD BANK 0 for 6 seconds\n");
 
   ficus_capture(8, 5);
-  fprintf(stderr, "\nRECORD BANK 8 for 5 seconds\n");
+  fprintf(stderr, "\nRECORD BANK 7 for 5 seconds\n");
 
   sleep(6);
 
   ficus_loadfile("capturedwavs/test0.wav", 0);
   fprintf(stderr, "\nLOAD FILE 'test0.wav' TO BANK '0'\n");
 
+  ficus_loadfile("capturedwavs/test8.wav", 8);
+  fprintf(stderr, "\nLOAD FILE 'test8.wav' TO BANK '7'\n");
+
   ficus_playback(0);
   fprintf(stderr, "\nPLAY BANK 0\n");
 
-  /* set playback of sample 0 to channel 0, 1=ON */
-  ficus_setmixout(0, 1, 1);
-  sleep(1);
+  ficus_playback(8);
+  fprintf(stderr, "\nPLAY BANK 7\n");
+
   /* set playback of sample 0 to channel 0, 1=OFF */
   ficus_setmixout(0, 0, 0);
   sleep(1);
@@ -70,18 +78,18 @@ main (int narg, char * args [])
   ficus_setmixout(0, 0, 0);
 
   /* set playback of sample 0 to channel 1, 1=ON */
-  ficus_setmixout(0, 1, 1);
+  ficus_setmixout(8, 1, 1);
   sleep(1);
   /* set playback of sample 0 to channel 1, 1=OFF */
-  ficus_setmixout(0, 1, 0);
+  ficus_setmixout(8, 1, 0);
   sleep(1);
-  ficus_setmixout(0, 1, 1);
+  ficus_setmixout(8, 1, 1);
   sleep(1);
-  ficus_setmixout(0, 1, 0);
+  ficus_setmixout(8, 1, 0);
   sleep(1);
-  ficus_setmixout(0, 1, 1);
+  ficus_setmixout(8, 1, 1);
   sleep(1);
-  ficus_setmixout(0, 1, 0);
+  ficus_setmixout(8, 1, 0);
 
   sleep(8);
 
