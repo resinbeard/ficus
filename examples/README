@@ -1,5 +1,6 @@
-there are the various example uses of ficus.
+First, descend into this directory
+cd ficus/examples
 
-to build examples, simply type:
+To build examples, simply type:
 ./maketests
 
