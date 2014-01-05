@@ -21,5 +21,6 @@ $ cp -r ficus/* yourprogram/.
 $ gcc -o yourprogram yourprogram.c libficus.c -lsndfile -ljack
 ```
 
-## Examples
+## Getting Started
+All available Ficus functions are listed in 'libficus.h'
 See README and source files in 'examples/' directory
