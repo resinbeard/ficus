@@ -24,4 +24,5 @@ $ gcc -o yourprogram yourprogram.c libficus.c -lsndfile -ljack
 
 ## Getting Started
 All available Ficus functions are listed in libficus.h
+
 For usage see README and source files in 'examples/' directory
