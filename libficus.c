@@ -748,6 +748,8 @@ ficus_capturef ( int banknumber, int captureframes)
   info_in[banknumber].can_capture = 1;
   info_in[banknumber].kill = 0;
 
+  pthread_cond_signal(&capture_thread_wait_cond);
+
   return 0;
 } /* ficus_capture */
 
