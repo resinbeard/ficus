@@ -10,16 +10,19 @@ Ficus is distributed as a group of source files, settings like available number 
  - [JACK](http://jackaudio.org/)
 
 ## Installing
-Copy the libficus files to your target build directory and build your application like any other included '.c' source file.
+Copy the libficus files to your target build directory
 ```
 $ git clone https://github.com/bonemurmurer/ficus.git
 $ cp -r ficus/* yourprogram/.
 ```
 
 ## Building
+Build your application as if you were including any other .c source file
 ```
 $ gcc -o yourprogram yourprogram.c libficus.c -lsndfile -ljack
 ```
 
-## Examples
-See README and source files in 'examples/' directory
+## Getting Started
+All available Ficus functions are listed in libficus.h
+
+For usage see README and source files in 'examples/' directory
