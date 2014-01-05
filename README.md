@@ -12,6 +12,7 @@ Ficus is distributed as a group of source files, settings like available number 
 ## Installing
 Copy the libficus files to your target build directory and build your application like any other included '.c' source file.
 ```
+$ git clone https://github.com/bonemurmurer/ficus.git
 $ cp -r ficus/* yourprogram/.
 ```
 
