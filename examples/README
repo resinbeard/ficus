@@ -1,6 +1,6 @@
-First, descend into this directory
-cd ficus/examples
+First, descend into this directory:
+$ cd ficus/examples
 
 To build examples, simply type:
-./maketests
+$ ./maketests
 
