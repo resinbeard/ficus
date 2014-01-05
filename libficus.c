@@ -206,10 +206,9 @@ process(jack_nframes_t nframes, void * arg)
     {
       if( capture_thread_isrunning == 1)
 	/* Queue incoming audio in case it needs to go to the disk */
+
 	for (n = 0; n < NUM_CHANNELS; n++)
-	  {
-	    rtqueue_enq(fifo_in[n], ins[n][i]);
-	  }
+	  rtqueue_enq(fifo_in[n], ins[n][i]);
       
       for (sample_count = 0; sample_count < NUM_SAMPLES; sample_count++)
 	{
@@ -332,13 +331,10 @@ disk_thread_in (void *arg)
 	}
       /* once in a while, check our jack overruns */
       if (overruns > 0)
-	{
-	  info_in[c].status = EPIPE;
-	}
+	info_in[c].status = EPIPE;
 
       if (wrote_to_file == 0) 
 	{
-	  fprintf(stderr, "SHITHAWK");
 	  capture_thread_isrunning = 0;
 	  pthread_mutex_lock(&capture_thread_wait_mutex);
 	  pthread_cond_wait(&capture_thread_wait_cond, &capture_thread_wait_mutex);

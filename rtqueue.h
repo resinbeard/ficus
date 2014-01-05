@@ -21,6 +21,15 @@ Copyright 2013 murray foster */
 #define rtqueue_h__
 
 #include <jack/jack.h>
+#include <pthread.h>
+
+int dequeue_is_waiting = 0;
+pthread_mutex_t dequeue_is_waiting_mutex;
+pthread_cond_t dequeue_is_waiting_cond;
+
+int enqueue_is_waiting = 0;
+pthread_mutex_t enqueue_is_waiting_mutex;
+pthread_cond_t enqueue_is_waiting_cond;
 
 /* JACK sample size, set by JACK server */
 const size_t smpl_size = sizeof (jack_default_audio_sample_t) ;
@@ -75,13 +84,22 @@ rtqueue_isempty(rtqueue_t *q)
 int
 rtqueue_enq(rtqueue_t *q, float data)
 {
-  /* if queue is full, return */
-  while ((q->tail + 1) % (q->recordlimit + 1) == q->head)
-    {}
+  /* if queue is full, wait */
+  if ((q->tail + 1) % (q->recordlimit + 1) == q->head)
+    {
+      enqueue_is_waiting = 1;
+      pthread_mutex_lock(&enqueue_is_waiting_mutex);
+      pthread_cond_wait(&enqueue_is_waiting_cond, &enqueue_is_waiting_mutex);
+      pthread_mutex_unlock(&enqueue_is_waiting_mutex); 
+      enqueue_is_waiting = 0;
+    }
 
   q->queue[q->tail] = data;
   q->tail = (q->tail + 1) % (q->recordlimit + 1);
   q->records+=1;
+
+  if (dequeue_is_waiting)
+    pthread_cond_signal(&dequeue_is_waiting_cond);
 
   return 0;
 }
@@ -91,14 +109,23 @@ rtqueue_deq(rtqueue_t *q)
 {
   float data;
 
-  /* if queue is empty, return */
+  /* if queue is empty, wait */
   while (q->head == q->tail)
-    {}
+    {
+      dequeue_is_waiting = 1;
+      pthread_mutex_lock(&dequeue_is_waiting_mutex);
+      pthread_cond_wait(&dequeue_is_waiting_cond, &dequeue_is_waiting_mutex);
+      pthread_mutex_unlock(&dequeue_is_waiting_mutex); 
+      dequeue_is_waiting = 0;
+    }
 
   /* dequeue and return data at the head */
   data = q->queue[q->head];
   q->head = (q->head + 1) % (q->recordlimit + 1);
   q->records-=1;
+
+  if (enqueue_is_waiting)
+    pthread_cond_signal(&enqueue_is_waiting_cond);
 
   return data;
 }
