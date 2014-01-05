@@ -792,6 +792,8 @@ ficus_playback(int bank_number)
     {
       info[bank_number].user_interrupt = 1 ;
 
+      interrupt_clear_fifo_out(bank_number);
+
       if( samples_finished_playing[bank_number] )
 	pthread_cond_signal(&samples_finished_playing_cond[bank_number]);
 
