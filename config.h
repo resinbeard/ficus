@@ -32,7 +32,7 @@ mrafoster at gmail dawtcom */
 			   too long. Overallication will zombify your
 			   JACK client if you queue too much data. */
 
-#define OUT_FRAMES 25000 /* same as above EXCEPT for output and
+#define OUT_FRAMES 99999 /* same as above EXCEPT for output and
 			    this output buffer size is set
 			    PER SOUND FILES ((NUM_SAMPLES). Each 
 			    soundfile in this system possesses its own

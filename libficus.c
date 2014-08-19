@@ -35,10 +35,10 @@ mrafoster at gmail dawt com */
 /* COMPILE-TIME DEFAULTS */
 #define NUM_SAMPLES 48 /* number of sample banks */
 #define NUM_CHANNELS 8  /* number of in/out channels */
-#define IN_FRAMES 50000 /* size of input buffer in FRAMES,
+#define IN_FRAMES 300000 /* size of input buffer in FRAMES,
 			   change this size based on available
 			   system memory */
-#define OUT_FRAMES 50000 /* same as above but for output */
+#define OUT_FRAMES 300000 /* same as above but for output */
 
 #include "config.h"
 
@@ -124,7 +124,6 @@ long overruns = 0;
 rtqueue_t *fifo_out[NUM_SAMPLES];
 rtqueue_t *fifo_in[NUM_CHANNELS];
 
-int fifo_out_clear_thread_isrunning = 0;
 int fifo_out_clear_amount[NUM_SAMPLES]={0};
 int fifo_out_clear_sig[NUM_SAMPLES]={0};
 pthread_t fifo_out_clear_thread_id; 
@@ -132,8 +131,7 @@ pthread_t fifo_out_clear_thread_id;
 void *
 clear_fifo_out (int bank, int numrecords)
 {
-  int n=0;
-  for(n=0;n<numrecords;n++)
+  while(1) 
     {
       if(rtqueue_isempty(fifo_out[bank]))
 	break;
@@ -147,7 +145,6 @@ void *
 clear_fifo_out_thread ()
 {
   int x;
-  fifo_out_clear_thread_isrunning = 1;
   for(x=0;x<NUM_SAMPLES;x++)
     if(fifo_out_clear_sig[x])
       {
@@ -156,7 +153,6 @@ clear_fifo_out_thread ()
 	fifo_out_clear_sig[x]=0;
 	info[x].user_interrupt=0;
       }
-  fifo_out_clear_thread_isrunning = 0;
   return;
 }
 
@@ -167,11 +163,8 @@ interrupt_clear_fifo_out (int sample_count)
   if( info[sample_count].user_interrupt )
     {
       fifo_out_clear_sig[sample_count]=1;
-      if( fifo_out_clear_thread_isrunning == 0 ) 
-	{
-	  pthread_create (&fifo_out_clear_thread_id, NULL, clear_fifo_out_thread, NULL);
-	  pthread_detach(fifo_out_clear_thread_id);
-	}
+      pthread_create (&fifo_out_clear_thread_id, NULL, clear_fifo_out_thread, NULL);
+      pthread_detach(fifo_out_clear_thread_id);
     }
   return;
 } /* interrupt_clear_fifo_out */
@@ -213,8 +206,6 @@ process(jack_nframes_t nframes, void * arg)
       for (sample_count = 0; sample_count < NUM_SAMPLES; sample_count++)
 	{
 	  sample = 0;	
-	  
-	  interrupt_clear_fifo_out(sample_count);
 
 	  if( samples_can_process[sample_count] ) 
 	    {
@@ -391,11 +382,7 @@ disk_thread (void *arg)
   do
     {
       do
-	{
-	  /* let the world know that we are currently
-	     processing this soundfile */
-	  active_file_record[0][info[sample_num].bank_number] = 1;
-	  
+	{ 
 	  /* seek to beginning of file, if playback is reversed seek to the end */
 	  if(info[sample_num].reverse)
 	    {
@@ -583,23 +570,28 @@ disk_thread (void *arg)
 	  
 	  if( info[sample_num].kill )
 	    break;
+
+	  /* hang here until this sample has finished playing */
+	  if( samples_can_process[sample_num] )
+	    {
+	      /* if the sample retriggers or something like that, we'll get a signal from functions
+		 ficus_playback() and ficus_killplayback() to resume thread execution */
+	      
+	      samples_finished_playing[sample_num] = 1;
+	      
+	      pthread_mutex_lock(&samples_finished_playing_mutex[sample_num]);
+	      pthread_cond_wait(&samples_finished_playing_cond[sample_num], &samples_finished_playing_mutex[sample_num]);
+	      pthread_mutex_unlock(&samples_finished_playing_mutex[sample_num]);
+	      
+	      samples_finished_playing[sample_num] = 0;
+	    } 
+	  if( info[sample_num].kill )
+	    {
+	      break;
+	    }
 	}
       while( (loop_state[info[sample_num].bank_number]==1) );
       
-      /* hang here until this sample has finished playing */
-      if( samples_can_process[sample_num] )
-	{
-	  /* if the sample retriggers or something like that, we'll get a signal from functions
-	     ficus_playback() and ficus_killplayback() to resume thread execution */
-	  
-	  samples_finished_playing[sample_num] = 1;
-	  
-	  pthread_mutex_lock(&samples_finished_playing_mutex[sample_num]);
-	  pthread_cond_wait(&samples_finished_playing_cond[sample_num], &samples_finished_playing_mutex[sample_num]);
-	  pthread_mutex_unlock(&samples_finished_playing_mutex[sample_num]);
-	  
-	  samples_finished_playing[sample_num] = 0;
-	}
       if( info[sample_num].kill )
 	{
 	  info[sample_num].kill = 0;
@@ -724,7 +716,7 @@ ficus_capture ( int banknumber, int seconds)
 } /* ficus_capture */
 
 int
-ficus_capturef ( int banknumber, int captureframes)
+ficus_capturef(int banknumber, int captureframes)
 {
   info_in[banknumber].duration = captureframes;
 
@@ -780,7 +772,10 @@ ficus_playback_speed(int bank_number, float speed)
       info[bank_number].speedmult=speed*(-1);
     }
   else
-    info[bank_number].speedmult=speed;
+    {
+      info[bank_number].speedmult=speed;
+      info[bank_number].reverse=0;
+    }
 } /* ficus_playback_reverse */
 
 void
@@ -813,6 +808,12 @@ ficus_playback(int bank_number)
     }
   else
     {
+      
+      /* let the world know that we are currently
+	 processing this soundfile */
+      active_file_record[0][info[bank_number].bank_number] = 1;
+      interrupt_clear_fifo_out(bank_number);
+
       /* if not, start the disk thread for this bank */
       pthread_create (&info[bank_number].thread_id, NULL, disk_thread, bank_number);
       info[bank_number].kill = 0;
@@ -939,9 +940,11 @@ ficus_killcapture (int banknumber)
 int
 ficus_killplayback (int banknumber)
 {
-  if( active_file_record[0] == 0 )
+  if( active_file_record[0][banknumber] == 0 )
     return 1;
-  
+
+  active_file_record[0][banknumber] = 0;
+
   /* Set this sample's playback to die. */
   info[banknumber].user_interrupt = 1;
   info[banknumber].kill = 1;
