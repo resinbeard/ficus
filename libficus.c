@@ -1076,22 +1076,22 @@ connect_channels(int channels_out, int channels_in)
 } /* connect_channels */
 
 int
-ficus_jackmonitor(int channel, int state)
+ficus_jackmonitor(int channel_out, int channel_in, int state)
 {
   char inport[65];
   char outport[65];
 
-  snprintf(inport, 65, "system:capture_%d", channel+1);
-  snprintf(outport, 65, "system:playback_%d", channel+1);
+  snprintf(inport, 65, "system:capture_%d", channel_out+1);
+  snprintf(outport, 65, "system:playback_%d", channel_in+1);
 
   if( !state )
     {
       if(jack_disconnect(client, inport, outport))
-	fprintf(stderr, "candor: failed to disconnect capture port%d and playback port%d\n", channel+1, channel+1);
+	fprintf(stderr, "candor: failed to disconnect capture port%d and playback port%d\n", channel_out+1, channel_in+1);
     }
   else
     if(jack_connect(client, inport, outport))
-      fprintf(stderr, "candor: failed to connect capture port%d and playback port%d\n", channel+1, channel+1);
+      fprintf(stderr, "candor: failed to connect capture port%d and playback port%d\n", channel_out+1, channel_in+1);
 
   return 0;
       
@@ -1125,7 +1125,6 @@ void
 ficus_clean()
 {
   int i = 0;
-  jack_client_close (client) ;
 
   for(i=0; i < NUM_SAMPLES;i++)
     {
@@ -1137,5 +1136,6 @@ ficus_clean()
   free (outs) ;
   free (output_port) ;
   free (input_port) ;
-
+  jack_client_close (client) ;
+  return 0;
 } /* ficus_clean */

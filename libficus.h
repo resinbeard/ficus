@@ -29,7 +29,7 @@ int ficus_loop(int bank_number, int state);
 int ficus_setmixout(int numsample, int channel, int state);
 int ficus_setmixin(int numsample, int channel, int state);
 
-int ficus_jackmonitor(int channel, int state);
+int ficus_jackmonitor(int channel_out, int channel_in, int state);
 
 void ficus_playback(int bank_number);
 void ficus_playback_speed(int bank_number, float speed);
