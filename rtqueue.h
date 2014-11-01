@@ -1,5 +1,5 @@
 /* rtqueue.h
-This file is a part of 'ficus'
+This file is a part of 'rtqueue'
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -12,27 +12,13 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-'rtqueue.h' is a simple FIFO linked list intended to hold 
+'rtqueue' is a simple FIFO linked list intended to hold 
 JACK sample data for process()'ing.
 
-Copyright 2013 murray foster */
+Copyright 2014 murray foster */
 
 #ifndef rtqueue_h__
 #define rtqueue_h__
-
-#include <jack/jack.h>
-#include <pthread.h>
-
-int dequeue_is_waiting = 0;
-pthread_mutex_t dequeue_is_waiting_mutex;
-pthread_cond_t dequeue_is_waiting_cond;
-
-int enqueue_is_waiting = 0;
-pthread_mutex_t enqueue_is_waiting_mutex;
-pthread_cond_t enqueue_is_waiting_cond;
-
-/* JACK sample size, set by JACK server */
-const size_t smpl_size = sizeof (jack_default_audio_sample_t) ;
 
 typedef struct queue
 {
@@ -43,91 +29,16 @@ typedef struct queue
   float *queue;
 } rtqueue_t;
 
+rtqueue_t *rtqueue_init(int recordlimit);
 
-rtqueue_t *
-rtqueue_init(int recordlimit)
-{
-  rtqueue_t *q = (rtqueue_t *) malloc(sizeof(rtqueue_t));
-  q->queue = (float *) malloc(smpl_size * (recordlimit + 1));
-  q->head = 0;
-  q->tail = 0;
-  q->recordlimit = recordlimit;
-  return q;
-}
+int rtqueue_numrecords(rtqueue_t *rtq);
 
-int
-rtqueue_numrecords(rtqueue_t *q)
-{
-  return q->records;
-}
+int rtqueue_isfull(rtqueue_t *rtq);
 
-int
-rtqueue_isfull(rtqueue_t *q)
-{
-  /* if queue is full, return 1 */
-  if ((q->tail + 1) % (q->recordlimit + 1) == q->head)
-    return 1;
-  else
-    return 0;
-}
+int rtqueue_isempty(rtqueue_t *rtq);
 
-int
-rtqueue_isempty(rtqueue_t *q)
-{
-  /* if queue is empty, return 1 */
-  if (q->head == q->tail)
-    return 1;
-  else
-    return 0;
-}
+int rtqueue_enq(rtqueue_t *rtq, float data);
 
-int
-rtqueue_enq(rtqueue_t *q, float data)
-{
-  /* if queue is full, wait */
-  if ((q->tail + 1) % (q->recordlimit + 1) == q->head)
-    {
-      enqueue_is_waiting = 1;
-      pthread_mutex_lock(&enqueue_is_waiting_mutex);
-      pthread_cond_wait(&enqueue_is_waiting_cond, &enqueue_is_waiting_mutex);
-      pthread_mutex_unlock(&enqueue_is_waiting_mutex); 
-      enqueue_is_waiting = 0;
-    }
-
-  q->queue[q->tail] = data;
-  q->tail = (q->tail + 1) % (q->recordlimit + 1);
-  q->records+=1;
-
-  if (dequeue_is_waiting)
-    pthread_cond_signal(&dequeue_is_waiting_cond);
-
-  return 0;
-}
-
-float
-rtqueue_deq(rtqueue_t *q)
-{
-  float data;
-
-  /* if queue is empty, wait */
-  while (q->head == q->tail)
-    {
-      dequeue_is_waiting = 1;
-      pthread_mutex_lock(&dequeue_is_waiting_mutex);
-      pthread_cond_wait(&dequeue_is_waiting_cond, &dequeue_is_waiting_mutex);
-      pthread_mutex_unlock(&dequeue_is_waiting_mutex); 
-      dequeue_is_waiting = 0;
-    }
-
-  /* dequeue and return data at the head */
-  data = q->queue[q->head];
-  q->head = (q->head + 1) % (q->recordlimit + 1);
-  q->records-=1;
-
-  if (enqueue_is_waiting)
-    pthread_cond_signal(&enqueue_is_waiting_cond);
-
-  return data;
-}
+float rtqueue_deq(rtqueue_t *rtq);
 
 #endif

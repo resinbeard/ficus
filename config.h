@@ -21,7 +21,7 @@ mrafoster at gmail dawtcom */
 /* COMPILE-TIME OPTIONS */
 #define NUM_SAMPLES 48 /* number of sound files to possibly store */
 
-#define NUM_CHANNELS 8  /* number of possible in/out channels */
+#define NUM_CHANNELS 2  /* number of possible in/out channels */
 /*  1999999 */
 #define IN_FRAMES 99999 /* size of audio input buffer in JACK FRAMES,
 			   PER CHANNEL. change this size based 

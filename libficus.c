@@ -871,25 +871,25 @@ ficus_loadfile(char *path, int bank_number)
 } /* ficus_loadfile */
 
 int
-ficus_setmixin(int numsample, int channel, int state)
+ficus_setmixin(int bank_number, int channel, int state)
 {
-  /* numsample - sample number */
+  /* bank_number - sample number */
   /* channel - channel */
-  /* state - state of specified channel */
+  /* state - state of specified channel 1/on 0/off */
 
-  capture_mix[numsample][channel] = state;
+  capture_mix[bank_number][channel] = state;
  
   return 0;
 } /* ficus_setmixin */
 
 int
-ficus_setmixout(int numsample, int channel, int state)
+ficus_setmixout(int bank_number, int channel, int state)
 {
-  /* numsample - sample number */
+  /* bank_number - sample number */
   /* channel - channel */
-  /* state - state of specified channel */
+  /* state - state of specified channel 1/on 0/off */
 
-  playback_mix[numsample][channel] = state;
+  playback_mix[bank_number][channel] = state;
   
   return 0;
 } /* ficus_setmixout */
@@ -904,56 +904,56 @@ ficus_loop(int bank_number, int state)
 } /* loop_bank */
 
 int
-ficus_iscapturing(int numsample)
+ficus_iscapturing(int bank_number)
 {
-  return active_file_record[1][numsample];
+  return active_file_record[1][bank_number];
 } /* ficus_iscapturing */
 
 
 int
-ficus_isplaying(int numsample)
+ficus_isplaying(int bank_number)
 {
-  return active_file_record[0][numsample];
+  return active_file_record[0][bank_number];
 } /* ficus_isplaying */
 
 int
-ficus_islooping(int numsample)
+ficus_islooping(int bank_number)
 {
-  return loop_state[numsample]; 
+  return loop_state[bank_number]; 
 } /* ficus_islooping */
 
 int
-ficus_killcapture (int banknumber)
+ficus_killcapture (int bank_number)
 {
   if( active_file_record[1] == 0 )
     return 1;
   
-  if ( info_in[banknumber].duration != JACK_MAX_FRAMES )
-      info_in[banknumber].total_captured += info_in[banknumber].duration;
+  if ( info_in[bank_number].duration != JACK_MAX_FRAMES )
+      info_in[bank_number].total_captured += info_in[bank_number].duration;
   else
-    info_in[banknumber].kill = 1;
+    info_in[bank_number].kill = 1;
 
   return 0;
 } /* ficus_killcapture */
 
 
 int
-ficus_killplayback (int banknumber)
+ficus_killplayback (int bank_number)
 {
-  if( active_file_record[0][banknumber] == 0 )
+  if( active_file_record[0][bank_number] == 0 )
     return 1;
 
-  active_file_record[0][banknumber] = 0;
+  active_file_record[0][bank_number] = 0;
 
   /* Set this sample's playback to die. */
-  info[banknumber].user_interrupt = 1;
-  info[banknumber].kill = 1;
+  info[bank_number].user_interrupt = 1;
+  info[bank_number].kill = 1;
 
-  if( samples_finished_playing[banknumber] )
-    pthread_cond_signal(&samples_finished_playing_cond[banknumber]);
+  if( samples_finished_playing[bank_number] )
+    pthread_cond_signal(&samples_finished_playing_cond[bank_number]);
 
-  if( samples_wait_process[banknumber] )
-    pthread_cond_signal(&samples_wait_process_cond[banknumber]);
+  if( samples_wait_process[bank_number] )
+    pthread_cond_signal(&samples_wait_process_cond[bank_number]);
   
   return 0;
 } /* ficus_killplayback */

@@ -26,8 +26,8 @@ int ficus_loadfile(char *path, int bank_number);
 
 int ficus_loop(int bank_number, int state);
 
-int ficus_setmixout(int numsample, int channel, int state);
-int ficus_setmixin(int numsample, int channel, int state);
+int ficus_setmixout(int bank_number, int channel, int state);
+int ficus_setmixin(int bank_number, int channel, int state);
 
 int ficus_jackmonitor(int channel_out, int channel_in, int state);
 
@@ -44,10 +44,10 @@ int ficus_durationf(int bank_number);
 int ficus_killplayback(int bank_number);
 int ficus_killcapture(int bank_number);
 
-int ficus_isplaying(int numsample);
-int ficus_iscapturing(int numsample);
+int ficus_isplaying(int bank_number);
+int ficus_iscapturing(int bank_number);
 
-int ficus_islooping(int numsample);
+int ficus_islooping(int bank_number);
 
 void ficus_clean();
 
