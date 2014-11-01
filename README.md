@@ -19,7 +19,7 @@ $ cp -r ficus/* yourprogram/.
 ## Building
 Build your application as if you were including any other .c source file
 ```
-$ gcc -o yourprogram yourprogram.c libficus.c -lsndfile -ljack
+$ gcc -o yourprogram yourprogram.c libficus.c rtqueue.c -lsndfile -ljack
 ```
 
 ## Getting Started
