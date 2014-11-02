@@ -1117,8 +1117,6 @@ ficus_clean()
 {
   int i = 0;
   
-  jack_client_close (client) ;
-
   for(i=0; i < NUM_SAMPLES;i++)
     {
       sf_close (sndfile[i]) ;
@@ -1129,5 +1127,6 @@ ficus_clean()
   free (outs) ;
   free (output_port) ;
   free (input_port) ;
+  jack_client_close (client) ;  
   return 0;
 } /* ficus_clean */
