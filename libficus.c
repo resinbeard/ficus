@@ -845,14 +845,6 @@ ficus_loadfile(char *path, int bank_number)
     {
       return 1;
     };
-  
-  /* Warn the user that the soundfile being loaded doesn't have
-     the same samplerate as JACK */
-  if (sndfileinfo[bank_number].samplerate != jack_sr)
-    {
-      /* logging */
-      printf("soundfile samplerate doesn not match JACK server.\n");
-    }
 
   /* Init the thread info struct. */
   memset (&info[bank_number], 0, sizeof (info[bank_number])) ; 
@@ -1045,7 +1037,7 @@ allocate_ports(int channels, int channels_in)
 } /* allocate_ports */
 
 void
-connect_channels(int channels_out, int channels_in)
+ficus_connect_channels(int channels_out, int channels_in)
 {
   int i = 0;
   char name [64] ;
@@ -1073,7 +1065,7 @@ connect_channels(int channels_out, int channels_in)
 	  snprintf(stdout, 100, "warning cannot connect input port %d (%s).\n", i, name) ;
 	}
     }
-} /* connect_channels */
+} /* ficus_connect_channels */
 
 int
 ficus_jackmonitor(int channel_out, int channel_in, int state)
@@ -1111,7 +1103,6 @@ ficus_setup(char *client_name, char *path, char *prefix, int bit_depth)
     return 1;
 
   allocate_ports(NUM_CHANNELS, NUM_CHANNELS);
-  connect_channels(NUM_CHANNELS, NUM_CHANNELS);
 
   setup_recbanks(path, prefix, bit_depth);
 
@@ -1125,6 +1116,8 @@ void
 ficus_clean()
 {
   int i = 0;
+  
+  jack_client_close (client) ;
 
   for(i=0; i < NUM_SAMPLES;i++)
     {
@@ -1136,6 +1129,5 @@ ficus_clean()
   free (outs) ;
   free (output_port) ;
   free (input_port) ;
-  jack_client_close (client) ;
   return 0;
 } /* ficus_clean */

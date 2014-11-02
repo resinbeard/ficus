@@ -51,4 +51,6 @@ int ficus_islooping(int bank_number);
 
 void ficus_clean();
 
+void ficus_connect_channels(int channels_out, int channels_in);
+
 #endif
